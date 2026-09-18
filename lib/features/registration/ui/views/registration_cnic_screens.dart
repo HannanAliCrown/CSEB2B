@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/ui/ds.dart';
 import '../../../design_preview/preview_journey.dart';
+import '../registration_scope.dart';
 import '../widgets/registration_scaffold.dart';
 
 /// Board 01 · G1 — CNIC front · camera only.
@@ -10,10 +11,20 @@ import '../widgets/registration_scaffold.dart';
 /// A dark capture surface with a gold-cornered frame; there is no gallery
 /// option for identity documents.
 class CnicCaptureScreen extends StatelessWidget {
-  const CnicCaptureScreen({super.key});
+  const CnicCaptureScreen({
+    super.key,
+    this.capture,
+    this.title = 'CNIC — Front',
+  });
+
+  /// Which capture the shutter takes. Always the camera.
+  final Future<void> Function()? capture;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
+    final flow = RegistrationScope.maybeOf(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F14),
       body: SafeArea(
@@ -41,9 +52,9 @@ class CnicCaptureScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'CNIC — Front',
-                          style: TextStyle(
+                        Text(
+                          title,
+                          style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
@@ -109,23 +120,31 @@ class CnicCaptureScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Container(
-                    width: 70,
-                    height: 70,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        width: 4,
-                      ),
-                    ),
+                  GestureDetector(
+                    onTap: () async {
+                      final take = capture ?? flow?.captureCnicFront;
+                      if (take == null) return;
+                      await take();
+                      flow?.openCnicReview();
+                    },
                     child: Container(
-                      width: 56,
-                      height: 56,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
+                      width: 70,
+                      height: 70,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          width: 4,
+                        ),
+                      ),
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ),
                   ),
@@ -216,50 +235,112 @@ class CnicReviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final flow = RegistrationScope.maybeOf(context);
+    final draft = flow?.draft;
+
     return RegistrationScaffold(
       title: 'Check Your Captures',
       step: 6,
       gap: 14,
       footer: DsFooterBar(
-        child: DsButton(label: 'Continue', onPressed: () => PreviewJourney.next(context)),
+        child: DsButton(
+          label: 'Continue',
+          onPressed: flow?.closeSubStage ?? () {},
+        ),
       ),
-      children: const [
-        DsUploadRow(
-          label: 'CNIC front',
-          meta: 'Uploaded',
-          state: DsUploadState.uploaded,
-          icon: LucideIcons.idCard,
-        ),
-        DsUploadRow(
-          label: 'CNIC back',
-          meta: 'Uploading · 64%',
-          state: DsUploadState.uploading,
-          progress: 0.64,
-          icon: LucideIcons.idCard,
-        ),
-        DsUploadRow(
-          label: 'Liveness selfie',
-          meta: 'Upload failed. Your photo is still saved on this phone.',
-          state: DsUploadState.failed,
-          icon: LucideIcons.scanFace,
-        ),
-        DsNotice(
-          icon: LucideIcons.shieldCheck,
-          message:
-              'Your CNIC images and selfie are encrypted and seen only by the '
-              'Crown Solar approval team.',
-        ),
-      ],
+      children: flow == null
+          ? const [
+              DsUploadRow(
+                label: 'CNIC front',
+                meta: 'Uploaded',
+                state: DsUploadState.uploaded,
+                icon: LucideIcons.idCard,
+              ),
+              DsUploadRow(
+                label: 'CNIC back',
+                meta: 'Uploading · 64%',
+                state: DsUploadState.uploading,
+                progress: 0.64,
+                icon: LucideIcons.idCard,
+              ),
+              DsUploadRow(
+                label: 'Liveness selfie',
+                meta: 'Upload failed. Your photo is still saved on this phone.',
+                state: DsUploadState.failed,
+                icon: LucideIcons.scanFace,
+              ),
+              DsNotice(
+                icon: LucideIcons.shieldCheck,
+                message:
+                    'Your CNIC images and selfie are encrypted and seen only '
+                    'by the Crown Solar approval team.',
+              ),
+            ]
+          : [
+              DsUploadRow(
+                label: 'CNIC front',
+                meta: draft!.cnicFrontPath == null
+                    ? 'Not captured'
+                    : 'Captured',
+                state: draft.cnicFrontPath == null
+                    ? DsUploadState.empty
+                    : DsUploadState.uploaded,
+                icon: LucideIcons.idCard,
+                onAction: flow.captureCnicFront,
+              ),
+              DsUploadRow(
+                label: 'CNIC back',
+                meta: draft.cnicBackPath == null ? 'Not captured' : 'Captured',
+                state: draft.cnicBackPath == null
+                    ? DsUploadState.empty
+                    : DsUploadState.uploaded,
+                icon: LucideIcons.idCard,
+                onAction: flow.captureCnicBack,
+              ),
+              DsUploadRow(
+                label: 'Liveness selfie',
+                meta: draft.selfiePath == null ? 'Not captured' : 'Captured',
+                state: draft.selfiePath == null
+                    ? DsUploadState.empty
+                    : DsUploadState.uploaded,
+                icon: LucideIcons.scanFace,
+                onAction: flow.captureSelfie,
+              ),
+              const DsNotice(
+                icon: LucideIcons.shieldCheck,
+                message:
+                    'Your CNIC images and selfie are encrypted and seen only '
+                    'by the Crown Solar approval team.',
+              ),
+            ],
     );
   }
 }
 
 /// Board 01 · G3 — CNIC number · read from the image.
-class CnicNumberScreen extends StatelessWidget {
+class CnicNumberScreen extends StatefulWidget {
   const CnicNumberScreen({super.key});
 
   @override
+  State<CnicNumberScreen> createState() => _CnicNumberScreenState();
+}
+
+class _CnicNumberScreenState extends State<CnicNumberScreen> {
+  TextEditingController? _cnic;
+
+  @override
+  void dispose() {
+    _cnic?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final flow = RegistrationScope.maybeOf(context);
+    _cnic ??= TextEditingController(
+      text: flow?.draft.cnicNumber ?? '35202-7719480-3',
+    );
+
     return RegistrationScaffold(
       title: 'Confirm CNIC Number',
       step: 6,
@@ -267,13 +348,18 @@ class CnicNumberScreen extends StatelessWidget {
       footer: DsFooterBar(
         child: Column(
           children: [
-            DsButton(label: 'Yes, This Is Correct', onPressed: () => PreviewJourney.next(context)),
+            DsButton(
+              label: 'Yes, This Is Correct',
+              onPressed: flow == null
+                  ? () => PreviewJourney.next(context)
+                  : flow.next,
+            ),
             const SizedBox(height: 10),
             DsButton(
               label: 'Retake CNIC Photo',
               variant: DsButtonVariant.quiet,
               icon: LucideIcons.camera,
-              onPressed: () {},
+              onPressed: flow?.captureCnicFront ?? () {},
             ),
           ],
         ),
@@ -310,10 +396,13 @@ class CnicNumberScreen extends StatelessWidget {
             ],
           ),
         ),
-        const DsInput(
+        DsInput(
           label: 'CNIC number',
-          value: '35202-7719480-3',
+          controller: _cnic,
+          onChanged: (value) =>
+              flow?.updateDraft((d) => d.copyWith(cnicNumber: value)),
           hint: 'Tap to correct any digit that does not match your card.',
+          error: flow?.error,
         ),
         const DsCaption(
           'If nothing could be read, this field arrives empty and you type the '

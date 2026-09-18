@@ -1,4 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- First launch asks for these through the real OS dialogs: a
+         notification prompt that never blocks the journey, and the phone's
+         current location, which routes a registration to the right market.
+         Without the declarations Android returns "permanently denied"
+         immediately and no dialog is shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+
     <application
         android:label="cse_b2b"
         android:name="${applicationName}"

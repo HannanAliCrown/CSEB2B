@@ -154,11 +154,7 @@ class AccountDeactivatedScreen extends StatelessWidget {
             'account cannot be opened at all.',
           ),
         ),
-        DsButton(
-          label: 'Call CRM',
-          icon: LucideIcons.phone,
-          onPressed: () {},
-        ),
+        DsButton(label: 'Call CRM', icon: LucideIcons.phone, onPressed: () {}),
       ],
     );
   }

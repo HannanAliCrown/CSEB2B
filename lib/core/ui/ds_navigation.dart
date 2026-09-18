@@ -206,7 +206,9 @@ class DsTabs extends StatelessWidget {
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: active ? context.colors.primary : Colors.transparent,
+                      color: active
+                          ? context.colors.primary
+                          : Colors.transparent,
                       width: 2,
                     ),
                   ),

@@ -63,11 +63,7 @@ class HomeDemo {
 
   static const _tradeTiles = [
     HomeTile(label: 'Send Cash', icon: LucideIcons.banknoteArrowUp),
-    HomeTile(
-      label: 'Cash Request',
-      icon: LucideIcons.handCoins,
-      badge: 2,
-    ),
+    HomeTile(label: 'Cash Request', icon: LucideIcons.handCoins, badge: 2),
     HomeTile(label: 'View Ledger', icon: LucideIcons.receiptText),
     HomeTile(label: 'Shop Branding', icon: LucideIcons.store),
     HomeTile(label: 'New Profile', icon: LucideIcons.userPlus, badge: 1),

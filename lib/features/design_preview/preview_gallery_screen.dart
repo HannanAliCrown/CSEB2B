@@ -44,8 +44,7 @@ class PreviewGalleryScreen extends StatelessWidget {
                   icon: LucideIcons.play,
                   variant: DsButtonVariant.secondary,
                   size: DsButtonSize.sm,
-                  onPressed: () =>
-                      PreviewJourney.start(context, board.journey),
+                  onPressed: () => PreviewJourney.start(context, board.journey),
                 ),
                 const SizedBox(height: AppSpacing.stepMd),
               ],
@@ -64,9 +63,9 @@ class PreviewGalleryScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: screen.builder),
-                      ),
+                      onTap: () => Navigator.of(
+                        context,
+                      ).push(MaterialPageRoute<void>(builder: screen.builder)),
                     ),
                 ],
               ),

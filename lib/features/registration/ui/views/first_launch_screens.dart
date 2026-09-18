@@ -5,9 +5,10 @@ import '../../../../core/ui/ds.dart';
 import '../../../design_preview/preview_journey.dart';
 import '../../../login/ui/widgets/crown_wordmark.dart';
 
-/// The navy splash the first-launch prompts sit on top of.
-class _BrandSplash extends StatelessWidget {
-  const _BrandSplash();
+/// The navy splash the first-launch prompts sit on top of. Also shown on
+/// its own while an OS permission dialog is up.
+class BrandSplash extends StatelessWidget {
+  const BrandSplash({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +33,7 @@ class NotificationPromptScreen extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          const Positioned.fill(child: _BrandSplash()),
+          const Positioned.fill(child: BrandSplash()),
           Positioned.fill(
             child: ColoredBox(
               color: const Color(0xFF0F172A).withValues(alpha: 0.45),
@@ -141,22 +142,41 @@ class _SystemAction extends StatelessWidget {
 
 /// Board 01 · A2 — Select Language, as a sheet over the splash.
 class SelectLanguageScreen extends StatefulWidget {
-  const SelectLanguageScreen({super.key});
+  const SelectLanguageScreen({
+    super.key,
+    this.language,
+    this.remember,
+    this.onLanguageChanged,
+    this.onRememberChanged,
+    this.onConfirm,
+  });
+
+  /// The language the flow already holds ('English', 'اردو', 'Roman Urdu').
+  final String? language;
+  final bool? remember;
+  final ValueChanged<String>? onLanguageChanged;
+  final ValueChanged<bool>? onRememberChanged;
+  final VoidCallback? onConfirm;
 
   @override
   State<SelectLanguageScreen> createState() => _SelectLanguageScreenState();
 }
 
 class _SelectLanguageScreenState extends State<SelectLanguageScreen> {
-  String _language = 'English';
-  bool _remember = true;
+  late String _language = widget.language ?? 'English';
+  late bool _remember = widget.remember ?? true;
+
+  void _select(String language) {
+    setState(() => _language = language);
+    widget.onLanguageChanged?.call(language);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          const Positioned.fill(child: _BrandSplash()),
+          const Positioned.fill(child: BrandSplash()),
           Positioned.fill(
             child: ColoredBox(
               color: const Color(0xFF0F172A).withValues(alpha: 0.45),
@@ -177,29 +197,37 @@ class _SelectLanguageScreenState extends State<SelectLanguageScreen> {
                       _LanguageOption(
                         label: 'English',
                         selected: _language == 'English',
-                        onTap: () => setState(() => _language = 'English'),
+                        onTap: () => _select('English'),
                       ),
                       const SizedBox(height: 10),
                       _LanguageOption(
                         label: 'اردو',
                         rtl: true,
                         selected: _language == 'اردو',
-                        onTap: () => setState(() => _language = 'اردو'),
+                        onTap: () => _select('اردو'),
                       ),
                       const SizedBox(height: 10),
                       _LanguageOption(
                         label: 'Roman Urdu',
                         selected: _language == 'Roman Urdu',
-                        onTap: () => setState(() => _language = 'Roman Urdu'),
+                        onTap: () => _select('Roman Urdu'),
                       ),
                       const SizedBox(height: AppSpacing.md),
                       DsCheckbox(
                         checked: _remember,
                         label: 'Remember my choice',
-                        onChanged: (v) => setState(() => _remember = v),
+                        onChanged: (v) {
+                          setState(() => _remember = v);
+                          widget.onRememberChanged?.call(v);
+                        },
                       ),
                       const SizedBox(height: AppSpacing.sm),
-                      DsButton(label: 'Confirm', onPressed: () => PreviewJourney.next(context)),
+                      DsButton(
+                        label: 'Confirm',
+                        onPressed:
+                            widget.onConfirm ??
+                            () => PreviewJourney.next(context),
+                      ),
                     ],
                   ),
                 ),
@@ -276,7 +304,10 @@ class _LanguageOption extends StatelessWidget {
 
 /// Board 01 · A3 — Current location, asked once up front.
 class LocationPermissionScreen extends StatelessWidget {
-  const LocationPermissionScreen({super.key});
+  const LocationPermissionScreen({super.key, this.onAllow, this.onNotNow});
+
+  final VoidCallback? onAllow;
+  final VoidCallback? onNotNow;
 
   @override
   Widget build(BuildContext context) {
@@ -286,12 +317,15 @@ class LocationPermissionScreen extends StatelessWidget {
       footer: DsFooterBar(
         child: Column(
           children: [
-            DsButton(label: 'Allow Location', onPressed: () => PreviewJourney.next(context)),
+            DsButton(
+              label: 'Allow Location',
+              onPressed: onAllow ?? () => PreviewJourney.next(context),
+            ),
             const SizedBox(height: 10),
             DsButton(
               label: 'Not now',
               variant: DsButtonVariant.quiet,
-              onPressed: () => PreviewJourney.next(context),
+              onPressed: onNotNow ?? () => PreviewJourney.next(context),
             ),
           ],
         ),
@@ -374,14 +408,23 @@ class _AssuranceLine extends StatelessWidget {
 
 /// Board 01 · A4 — Location off, explained.
 class LocationOffScreen extends StatelessWidget {
-  const LocationOffScreen({super.key});
+  const LocationOffScreen({
+    super.key,
+    this.onOpenSettings,
+    this.onContinueWithout,
+    this.onBack,
+  });
+
+  final VoidCallback? onOpenSettings;
+  final VoidCallback? onContinueWithout;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     return DsScreen(
       appBar: DsAppBar(
         title: 'Location Needed',
-        onBack: () => Navigator.of(context).maybePop(),
+        onBack: onBack ?? () => Navigator.of(context).maybePop(),
       ),
       padding: const EdgeInsets.all(AppSpacing.screenPadding),
       gap: AppSpacing.stepLg,
@@ -413,13 +456,14 @@ class LocationOffScreen extends StatelessWidget {
               DsButton(
                 label: 'Open Settings',
                 icon: LucideIcons.settings,
-                onPressed: () {},
+                onPressed: onOpenSettings ?? () {},
               ),
               const SizedBox(height: 10),
               DsButton(
                 label: 'Continue without location',
                 variant: DsButtonVariant.tertiary,
-                onPressed: () => PreviewJourney.next(context),
+                onPressed:
+                    onContinueWithout ?? () => PreviewJourney.next(context),
               ),
             ],
           ),

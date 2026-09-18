@@ -99,10 +99,7 @@ class DsInput extends StatelessWidget {
                   ? CrossAxisAlignment.start
                   : CrossAxisAlignment.center,
               children: [
-                if (prefix != null) ...[
-                  prefix!,
-                  const SizedBox(width: 10),
-                ],
+                if (prefix != null) ...[prefix!, const SizedBox(width: 10)],
                 Expanded(
                   child: TextField(
                     controller:
@@ -317,7 +314,11 @@ class DsCheckbox extends StatelessWidget {
                   ),
                 ),
                 child: checked
-                    ? const Icon(LucideIcons.check, size: 15, color: Colors.white)
+                    ? const Icon(
+                        LucideIcons.check,
+                        size: 15,
+                        color: Colors.white,
+                      )
                     : null,
               ),
               const SizedBox(width: AppSpacing.stepMd),
@@ -448,7 +449,9 @@ class DsSwitch extends StatelessWidget {
           height: 28,
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: checked ? context.colors.primary : context.palette.borderStrong,
+            color: checked
+                ? context.colors.primary
+                : context.palette.borderStrong,
             borderRadius: BorderRadius.circular(AppRadii.pill),
           ),
           child: AnimatedAlign(
@@ -512,7 +515,9 @@ class DsOtpBoxes extends StatelessWidget {
                   fontSize: 22,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'monospace',
-                  color: error ? context.status.error : context.colors.onSurface,
+                  color: error
+                      ? context.status.error
+                      : context.colors.onSurface,
                 ),
               ),
             ),
@@ -604,7 +609,9 @@ class DsPinDots extends StatelessWidget {
                 ? (error ? context.colors.error : context.colors.primary)
                 : Colors.transparent,
             border: Border.all(
-              color: error ? context.colors.error : context.palette.borderStrong,
+              color: error
+                  ? context.colors.error
+                  : context.palette.borderStrong,
               width: 1.5,
             ),
           ),

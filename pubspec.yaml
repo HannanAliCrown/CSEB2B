@@ -21,6 +21,15 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   uuid: ^4.5.1
   lucide_icons_flutter: ^3.1.20
+  shared_preferences: ^2.5.5
+  permission_handler: ^13.0.2
+  image_picker: ^1.2.3
+
+dependency_overrides:
+  # 14.x compiles against the canary Android SDK 37, which the local SDK
+  # manager installs with metadata AGP cannot resolve. 13.0.1 is the last
+  # release that builds against SDK 36 and has the same Dart API.
+  permission_handler_android: 13.0.1
 
 dev_dependencies:
   flutter_test:

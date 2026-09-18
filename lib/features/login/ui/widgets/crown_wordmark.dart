@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 /// The Crown Solar Energy lockup. The reverse (white) lockup is used on the
 /// navy splash and brand surfaces; the primary lockup everywhere else.
 class CrownWordmark extends StatelessWidget {
-  const CrownWordmark({super.key, this.height, this.width, this.reverse = false});
+  const CrownWordmark({
+    super.key,
+    this.height,
+    this.width,
+    this.reverse = false,
+  });
 
   final double? height;
   final double? width;

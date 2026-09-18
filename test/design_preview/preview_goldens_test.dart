@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -33,13 +34,43 @@ void main() {
               home: Builder(builder: screen.builder),
             ),
           );
-          await tester.pump(const Duration(milliseconds: 300));
+          // Brand images need real I/O to decode, which the test's fake async
+          // cannot drive. Warming them first keeps a screenshot identical
+          // whether the screen runs first or last.
+          await tester.runAsync(() async {
+            for (final asset in const [
+              'assets/images/crown_solar_logo.png',
+              'assets/images/crown_logo_reverse.png',
+            ]) {
+              final bytes = await rootBundle.load(asset);
+              await precacheImage(
+                MemoryImage(bytes.buffer.asUint8List()),
+                tester.element(find.byType(MaterialApp)),
+              );
+              await precacheImage(
+                AssetImage(asset),
+                tester.element(find.byType(MaterialApp)),
+              );
+            }
+          });
+
+          // Settle rather than pumping a fixed duration: screens that load a
+          // brand image otherwise capture a frame before it decodes, and the
+          // comparison turns flaky. Screens with a progress spinner never
+          // settle, so those fall back to a fixed pump.
+          try {
+            await tester.pumpAndSettle(
+              const Duration(milliseconds: 100),
+              EnginePhase.sendSemanticsUpdate,
+              const Duration(seconds: 2),
+            );
+          } on FlutterError {
+            await tester.pump(const Duration(milliseconds: 300));
+          }
 
           await expectLater(
             find.byType(MaterialApp),
-            matchesGoldenFile(
-              'goldens/${board.number}-${screen.id}.png',
-            ),
+            matchesGoldenFile('goldens/${board.number}-${screen.id}.png'),
           );
         });
       }

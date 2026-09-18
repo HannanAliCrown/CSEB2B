@@ -21,8 +21,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showActivity =
-        recentActivity ?? demo.role == PartnerRole.distributor;
+    final showActivity = recentActivity ?? demo.role == PartnerRole.distributor;
 
     return Scaffold(
       body: SafeArea(
@@ -32,7 +31,10 @@ class HomeScreen extends StatelessWidget {
             HomeHeader(businessName: demo.businessName, role: demo.roleLabel),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.only(top: 10, bottom: AppSpacing.stepLg),
+                padding: const EdgeInsets.only(
+                  top: 10,
+                  bottom: AppSpacing.stepLg,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -258,10 +260,7 @@ class HomeCashBlockedScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: DsBottomNav(
-        items: demo.nav,
-        activeId: 'home',
-      ),
+      bottomNavigationBar: DsBottomNav(items: demo.nav, activeId: 'home'),
     );
   }
 }
@@ -368,10 +367,7 @@ class HomePointsBlockedScreen extends StatelessWidget {
           ),
         ),
       ],
-      bottomNav: DsBottomNav(
-        items: HomeDemo.retailer.nav,
-        activeId: 'home',
-      ),
+      bottomNav: DsBottomNav(items: HomeDemo.retailer.nav, activeId: 'home'),
     );
   }
 }
@@ -449,11 +445,17 @@ class HomeSkeletonScreen extends StatelessWidget {
                     const SizedBox(height: AppSpacing.md),
                     Row(
                       children: const [
-                        Expanded(child: DsSkeleton(height: 94, radius: AppRadii.md)),
+                        Expanded(
+                          child: DsSkeleton(height: 94, radius: AppRadii.md),
+                        ),
                         SizedBox(width: AppSpacing.stepMd),
-                        Expanded(child: DsSkeleton(height: 94, radius: AppRadii.md)),
+                        Expanded(
+                          child: DsSkeleton(height: 94, radius: AppRadii.md),
+                        ),
                         SizedBox(width: AppSpacing.stepMd),
-                        Expanded(child: DsSkeleton(height: 94, radius: AppRadii.md)),
+                        Expanded(
+                          child: DsSkeleton(height: 94, radius: AppRadii.md),
+                        ),
                       ],
                     ),
                   ],

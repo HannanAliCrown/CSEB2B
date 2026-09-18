@@ -226,7 +226,9 @@ class DsUploadRow extends StatelessWidget {
                       value: progress,
                       minHeight: 4,
                       backgroundColor: context.palette.sunken,
-                      valueColor: AlwaysStoppedAnimation(context.colors.primary),
+                      valueColor: AlwaysStoppedAnimation(
+                        context.colors.primary,
+                      ),
                     ),
                   ),
               ],

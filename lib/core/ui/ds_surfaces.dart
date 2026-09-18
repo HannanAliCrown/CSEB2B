@@ -138,12 +138,17 @@ class DsRowGroup extends StatelessWidget {
     for (var i = 0; i < children.length; i++) {
       rows.add(children[i]);
       if (i != children.length - 1) {
-        rows.add(Divider(height: 1, thickness: 1, color: context.colors.outline));
+        rows.add(
+          Divider(height: 1, thickness: 1, color: context.colors.outline),
+        );
       }
     }
     return DsCard(
       padding: padding ?? const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
     );
   }
 }
@@ -383,7 +388,10 @@ class DsSettingRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.stepMd),
       child: Row(
         children: [
-          if (leading != null) ...[leading!, const SizedBox(width: AppSpacing.stepMd)],
+          if (leading != null) ...[
+            leading!,
+            const SizedBox(width: AppSpacing.stepMd),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

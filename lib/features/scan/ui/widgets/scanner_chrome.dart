@@ -135,10 +135,7 @@ class ViewfinderFrame extends StatelessWidget {
           top: 0,
           bottom: 0,
           child: Center(
-            child: Container(
-              height: 2,
-              color: gold.withValues(alpha: 0.85),
-            ),
+            child: Container(height: 2, color: gold.withValues(alpha: 0.85)),
           ),
         ),
       ],

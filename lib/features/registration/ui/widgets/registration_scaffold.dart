@@ -63,10 +63,7 @@ class RegistrationScaffold extends StatelessWidget {
                   AppSpacing.screenPadding,
                   0,
                 ),
-                child: DsProgressSteps(
-                  steps: registrationSteps,
-                  current: step,
-                ),
+                child: DsProgressSteps(steps: registrationSteps, current: step),
               ),
             Expanded(
               child: SingleChildScrollView(

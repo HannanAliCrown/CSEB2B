@@ -90,7 +90,11 @@ class SendCashRecipientScreen extends StatelessWidget {
               ),
           ],
         ),
-        DsSectionHeader(title: 'Recent', actionLabel: 'See all', onAction: () {}),
+        DsSectionHeader(
+          title: 'Recent',
+          actionLabel: 'See all',
+          onAction: () {},
+        ),
         DsCard(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
           child: Column(
@@ -440,7 +444,11 @@ class SendCashAmountScreen extends StatelessWidget {
             _AmountChip(label: '10,000'),
             _AmountChip(label: '25,000', selected: true),
             _AmountChip(label: '50,000'),
-            _AmountChip(label: 'Custom', dashed: true, icon: LucideIcons.pencil),
+            _AmountChip(
+              label: 'Custom',
+              dashed: true,
+              icon: LucideIcons.pencil,
+            ),
           ],
         ),
       ],

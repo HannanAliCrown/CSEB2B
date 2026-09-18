@@ -35,7 +35,8 @@ class PreviewJourney extends InheritedWidget {
 
   /// Pushes the next screen in the journey, if there is one.
   static void next(BuildContext context) {
-    final journey = context.dependOnInheritedWidgetOfExactType<PreviewJourney>();
+    final journey = context
+        .dependOnInheritedWidgetOfExactType<PreviewJourney>();
     if (journey == null) return;
     final nextIndex = journey.index + 1;
     if (nextIndex >= journey.steps.length) {

@@ -389,7 +389,8 @@ class ScanDisputeSubmittedScreen extends StatelessWidget {
                   ),
                   DsTimelineStep(
                     title: 'They may contact you',
-                    meta: 'Through Chat or a phone call, if they need more '
+                    meta:
+                        'Through Chat or a phone call, if they need more '
                         'detail.',
                   ),
                   DsTimelineStep(

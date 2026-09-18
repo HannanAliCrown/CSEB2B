@@ -10,12 +10,7 @@ import '../widgets/crown_wordmark.dart';
 /// Mobile number only, "Keep me signed in", and the device-policy notice
 /// stated up front so the OTP screen is never a surprise.
 class SignInScreen extends StatefulWidget {
-  const SignInScreen({
-    super.key,
-    this.notice,
-    this.onSignIn,
-    this.onRegister,
-  });
+  const SignInScreen({super.key, this.notice, this.onSignIn, this.onRegister});
 
   /// The session-expired variant (B3) reuses this screen with a notice.
   final Widget? notice;

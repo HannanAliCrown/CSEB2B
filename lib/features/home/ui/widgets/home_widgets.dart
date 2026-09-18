@@ -84,7 +84,10 @@ class HomeHeader extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: context.colors.error,
                       shape: BoxShape.circle,
-                      border: Border.all(color: context.colors.surface, width: 2),
+                      border: Border.all(
+                        color: context.colors.surface,
+                        width: 2,
+                      ),
                     ),
                   ),
                 ),
@@ -319,7 +322,9 @@ class HomePromoSlider extends StatelessWidget {
               height: 6,
               margin: const EdgeInsets.symmetric(horizontal: 3),
               decoration: BoxDecoration(
-                color: i == 0 ? context.colors.primary : const Color(0xFFC9D2E0),
+                color: i == 0
+                    ? context.colors.primary
+                    : const Color(0xFFC9D2E0),
                 borderRadius: BorderRadius.circular(AppRadii.pill),
               ),
             );
@@ -377,7 +382,10 @@ class ScanQrCta extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF3F3312)),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF3F3312),
+                    ),
                   ),
                 ],
               ),
@@ -404,7 +412,9 @@ class HomeTicker extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.screenPadding,
+        ),
         child: Text(
           message,
           maxLines: 1,

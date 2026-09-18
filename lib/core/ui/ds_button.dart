@@ -41,7 +41,11 @@ class DsButton extends StatelessWidget {
     final palette = context.palette;
     final off = disabled || loading || onPressed == null;
 
-    final (Color background, Color foreground, Color? border) = switch (variant) {
+    final (
+      Color background,
+      Color foreground,
+      Color? border,
+    ) = switch (variant) {
       DsButtonVariant.primary => (colors.primary, colors.onPrimary, null),
       DsButtonVariant.secondary => (
         colors.surface,

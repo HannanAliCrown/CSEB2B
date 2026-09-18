@@ -170,10 +170,7 @@ class DsNotice extends StatelessWidget {
     final (fill, foreground) = dsToneColors(context, tone);
     return Container(
       padding: EdgeInsets.all(dense ? AppSpacing.stepMd : AppSpacing.md),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: AppRadii.mdRadius,
-      ),
+      decoration: BoxDecoration(color: fill, borderRadius: AppRadii.mdRadius),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -254,7 +251,11 @@ class DsEmptyState extends StatelessWidget {
             ),
             child: Icon(icon, size: 30, color: context.palette.textTertiary),
           ),
-          Text(title, style: context.texts.titleLarge, textAlign: TextAlign.center),
+          Text(
+            title,
+            style: context.texts.titleLarge,
+            textAlign: TextAlign.center,
+          ),
           if (message != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -573,7 +574,12 @@ class DsDialogCard extends StatelessWidget {
           if (icon != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.stepMd),
-              child: DsIconMedallion(icon: icon!, tone: tone, size: 44, iconSize: 22),
+              child: DsIconMedallion(
+                icon: icon!,
+                tone: tone,
+                size: 44,
+                iconSize: 22,
+              ),
             ),
           Text(title, style: context.texts.titleMedium),
           const SizedBox(height: AppSpacing.stepMd),
