@@ -70,6 +70,12 @@ class MockRegistrationService implements RegistrationService {
   }
 
   @override
+  Future<String?> cnicHolder(String cnicNumber) async {
+    await Future<void>.delayed(_latency);
+    return _store.accountForCnic(cnicNumber)?.displayName;
+  }
+
+  @override
   Future<RegistrationSubmission> submit(RegistrationDraft draft) async {
     await Future<void>.delayed(_latency);
     final submittedAt = DateTime.now();

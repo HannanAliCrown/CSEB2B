@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/ui/ds.dart';
@@ -7,6 +10,7 @@ import '../../data/models/registration_draft.dart';
 import '../../data/services/media_capture_service.dart';
 import '../registration_scope.dart';
 import '../widgets/editable_otp_field.dart';
+import '../widgets/shop_location_map.dart';
 import '../view_models/registration_flow_view_model.dart';
 import '../widgets/registration_scaffold.dart';
 
@@ -325,7 +329,7 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
             draft?.fullName ?? 'Muhammad Adnan Shahid',
           ),
           onChanged: (v) => flow?.updateDraft((d) => d.copyWith(fullName: v)),
-          error: flow?.error,
+          error: flow?.errorFor('fullName'),
         ),
         DsInput(
           label: 'Alternate mobile number',
@@ -343,6 +347,7 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
           ),
           onChanged: (v) =>
               flow?.updateDraft((d) => d.copyWith(businessName: v)),
+          error: flow?.errorFor('businessName'),
         ),
         DsInput(
           label: 'Business address',
@@ -352,10 +357,15 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
           ),
           onChanged: (v) =>
               flow?.updateDraft((d) => d.copyWith(businessAddress: v)),
+          error: flow?.errorFor('businessAddress'),
         ),
         DsSelect(
           label: 'Market',
-          value: draft?.market ?? 'Ravi Road, Lahore',
+          // Inside the wizard nothing is pre-chosen: showing the design's
+          // sample market would claim a choice the draft has not made.
+          value: flow == null ? 'Ravi Road, Lahore' : draft?.market,
+          placeholder: 'Choose your market',
+          error: flow?.errorFor('market'),
           onTap: flow == null ? null : () => _pickMarket(context, flow),
         ),
         Column(
@@ -378,6 +388,16 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
                   ? '${draft.shopLatitude!.toStringAsFixed(4)}° N, '
                         '${draft.shopLongitude!.toStringAsFixed(4)}° E'
                   : 'No pin dropped yet',
+              // A read-only preview of the pin; placing it happens on the
+              // full-screen map behind the action.
+              surface: draft == null
+                  ? null
+                  : ShopLocationMap(
+                      pin: draft.hasShopPin
+                          ? LatLng(draft.shopLatitude!, draft.shopLongitude!)
+                          : null,
+                      interactive: false,
+                    ),
               actionLabel: 'Drop pin on map',
               onAction: flow?.openShopPin,
             ),
@@ -427,17 +447,44 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
 }
 
 /// Board 01 · C2 — Pin drop · market mismatch, non-blocking.
-class RegistrationPinDropScreen extends StatelessWidget {
+class RegistrationPinDropScreen extends StatefulWidget {
   const RegistrationPinDropScreen({super.key});
 
-  /// Where the prototype drops the pin when the partner confirms. A real map
-  /// would report the position the camera is centred on.
-  static const _pinnedLatitude = 31.5871;
-  static const _pinnedLongitude = 74.3142;
+  @override
+  State<RegistrationPinDropScreen> createState() =>
+      _RegistrationPinDropScreenState();
+}
+
+class _RegistrationPinDropScreenState extends State<RegistrationPinDropScreen> {
+  /// Where the pin sits while the partner is still placing it. It only
+  /// becomes the shop's location when they confirm.
+  LatLng? _pin;
+  bool _restored = false;
+
+  /// What is actually known once a pin is down: which market it will be
+  /// checked against, and that it need not match anything else. Whether the
+  /// pin really falls inside that market is not something this app can tell —
+  /// there are no market boundaries here — so it never claims it does or
+  /// does not.
+  String _pinnedMessage(String? market) {
+    final checkedAgainst = market == null
+        ? 'Crown Solar CRM will check it with you once you choose your market.'
+        : 'Crown Solar CRM will check it against $market with you.';
+    return 'Your pin is recorded. It does not have to match your business '
+        'address or where your phone is right now — $checkedAgainst';
+  }
 
   @override
   Widget build(BuildContext context) {
     final flow = RegistrationScope.maybeOf(context);
+    final draft = flow?.draft;
+
+    if (!_restored) {
+      _restored = true;
+      if (draft != null && draft.hasShopPin) {
+        _pin = LatLng(draft.shopLatitude!, draft.shopLongitude!);
+      }
+    }
 
     return Scaffold(
       appBar: DsAppBar(
@@ -448,27 +495,45 @@ class RegistrationPinDropScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          const Expanded(child: DsMapPlaceholder(height: null)),
+          Expanded(
+            child: flow == null
+                ? const DsMapPlaceholder(height: null)
+                : ShopLocationMap(
+                    pin: _pin,
+                    onPinMoved: (point) => setState(() => _pin = point),
+                  ),
+          ),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.screenPadding),
             child: DsNotice(
-              icon: LucideIcons.triangleAlert,
-              tone: DsTone.warning,
-              message:
-                  'Your pin is outside Ravi Road, Lahore, and different from '
-                  'where your phone is right now. Both are fine — you can '
-                  'still continue, and Crown Solar CRM will check the location '
-                  'with you.',
+              icon: flow == null
+                  ? LucideIcons.triangleAlert
+                  : LucideIcons.mapPin,
+              // Nothing here detects a mismatch, so nothing here warns about
+              // one. The design's warning state stands in the preview.
+              tone: flow == null ? DsTone.warning : DsTone.info,
+              message: flow == null
+                  ? 'Your pin is outside Ravi Road, Lahore, and different '
+                        'from where your phone is right now. Both are fine — '
+                        'you can still continue, and Crown Solar CRM will '
+                        'check the location with you.'
+                  : _pin == null
+                  ? 'Tap the map where your shop is. You can drag the pin to '
+                        'adjust it before confirming.'
+                  : _pinnedMessage(draft?.market),
               action: DsButton(
                 label: 'Confirm This Location',
-                onPressed: () {
-                  if (flow == null) {
-                    Navigator.of(context).maybePop();
-                    return;
-                  }
-                  flow.setShopPin(_pinnedLatitude, _pinnedLongitude);
-                  flow.closeSubStage();
-                },
+                // Nothing is confirmed until a pin has actually been placed.
+                onPressed: flow != null && _pin == null
+                    ? null
+                    : () {
+                        if (flow == null) {
+                          Navigator.of(context).maybePop();
+                          return;
+                        }
+                        flow.setShopPin(_pin!.latitude, _pin!.longitude);
+                        flow.closeSubStage();
+                      },
               ),
             ),
           ),
@@ -527,7 +592,8 @@ class _RegistrationInstallerMediaScreenState
             hint: i < 2 ? 'Required' : 'Optional',
             controller: _controller(i, i < links.length ? links[i] : ''),
             onChanged: (value) => flow?.setVideoLink(i, value),
-            error: i == 0 ? flow?.error : null,
+            keyboardType: TextInputType.url,
+            error: flow?.errorFor('videoLink$i'),
           ),
         const DsNotice(
           icon: LucideIcons.info,
@@ -664,8 +730,38 @@ class RegistrationOtpScreen extends StatefulWidget {
 class _RegistrationOtpScreenState extends State<RegistrationOtpScreen> {
   final _code = TextEditingController();
 
+  /// Resending is held for this long after a code is sent, and the row counts
+  /// down to it rather than showing a frozen time.
+  static const _resendHold = Duration(seconds: 30);
+
+  Timer? _ticker;
+  int _secondsLeft = _resendHold.inSeconds;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _ticker?.cancel();
+    setState(() => _secondsLeft = _resendHold.inSeconds);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() => _secondsLeft--);
+      if (_secondsLeft <= 0) timer.cancel();
+    });
+  }
+
+  String get _countdown {
+    final seconds = _secondsLeft < 0 ? 0 : _secondsLeft;
+    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+    return '$minutes:${(seconds % 60).toString().padLeft(2, '0')}';
+  }
+
   @override
   void dispose() {
+    _ticker?.cancel();
     _code.dispose();
     super.dispose();
   }
@@ -722,7 +818,17 @@ class _RegistrationOtpScreenState extends State<RegistrationOtpScreen> {
               ),
             ],
           ),
-        DsResendRow(countdown: '00:24', onResend: flow?.requestOtp),
+        // Resend stays unavailable until the hold expires; the design's
+        // sample time stands outside the wizard.
+        DsResendRow(
+          countdown: flow == null ? '00:24' : _countdown,
+          onResend: flow == null || _secondsLeft > 0
+              ? null
+              : () {
+                  flow.requestOtp();
+                  _startCountdown();
+                },
+        ),
         const DsNotice(
           icon: LucideIcons.save,
           tone: DsTone.info,

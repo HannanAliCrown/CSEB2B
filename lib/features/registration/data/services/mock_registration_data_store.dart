@@ -5,12 +5,17 @@ class MockAccount {
     required this.role,
     required this.displayName,
     required this.market,
+    required this.cnicNumber,
   });
 
   final String mobileNumber;
   final String role;
   final String displayName;
   final String market;
+
+  /// The CNIC already on file for this account, so a second registration
+  /// cannot claim the same identity.
+  final String cnicNumber;
 }
 
 /// The prototype's stand-in for Crown Solar's records: the accounts that
@@ -32,24 +37,28 @@ class MockRegistrationDataStore {
       role: 'Retailer',
       displayName: 'Bilal Traders',
       market: 'Hall Road, Lahore',
+      cnicNumber: '35202-1122334-5',
     ),
     MockAccount(
       mobileNumber: '+92 300 4821190',
       role: 'Installer',
       displayName: 'Adnan Solar Works',
       market: 'Ravi Road, Lahore',
+      cnicNumber: '35202-7719480-3',
     ),
     MockAccount(
       mobileNumber: '+92 300 7781204',
       role: 'Retailer',
       displayName: 'Al-Noor Electric Store',
       market: 'Ravi Road, Lahore',
+      cnicNumber: '35202-4410932-7',
     ),
     MockAccount(
       mobileNumber: '+92 301 4429911',
       role: 'Wholesaler',
       displayName: 'Hamza Solar House',
       market: 'Badami Bagh, Lahore',
+      cnicNumber: '35202-9087651-1',
     ),
   ];
 
@@ -84,6 +93,19 @@ class MockRegistrationDataStore {
     }
     return null;
   }
+
+  /// The account already holding this CNIC, if any. Digits only, so the
+  /// dashes a partner types never decide the answer.
+  MockAccount? accountForCnic(String cnicNumber) {
+    final needle = digitsOf(cnicNumber);
+    if (needle.length != 13) return null;
+    for (final account in _accounts) {
+      if (digitsOf(account.cnicNumber) == needle) return account;
+    }
+    return null;
+  }
+
+  static String digitsOf(String value) => value.replaceAll(RegExp(r'\D'), '');
 
   String issueOtp(String mobileNumber) {
     final code = developmentOtp;

@@ -51,6 +51,9 @@ class RegistrationRepository {
   Future<BuyingSourceLookup> lookupBuyingSource(String mobileNumber) =>
       _service.lookupBuyingSource(mobileNumber);
 
+  Future<String?> cnicHolder(String cnicNumber) =>
+      _service.cnicHolder(cnicNumber);
+
   Future<RegistrationSubmission> submit(RegistrationDraft draft) =>
       _service.submit(draft);
 

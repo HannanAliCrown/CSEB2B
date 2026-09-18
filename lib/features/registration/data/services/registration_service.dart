@@ -92,6 +92,10 @@ abstract interface class RegistrationService {
 
   Future<BuyingSourceLookup> lookupBuyingSource(String mobileNumber);
 
+  /// The name on the account already holding this CNIC, or null when it is
+  /// free. One identity never registers twice.
+  Future<String?> cnicHolder(String cnicNumber);
+
   /// Records the application. Only the first buying source is asked to
   /// verify it; the rest are kept with the request.
   Future<RegistrationSubmission> submit(RegistrationDraft draft);

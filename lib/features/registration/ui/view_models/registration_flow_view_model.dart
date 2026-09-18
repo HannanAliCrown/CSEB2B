@@ -67,6 +67,13 @@ class RegistrationFlowViewModel extends ChangeNotifier {
   /// their own error styling.
   String? error;
 
+  /// The same validation, split by field, so a message sits under the input
+  /// it belongs to instead of collecting under the first field on the step.
+  /// Keys are the field ids used by [errorFor].
+  Map<String, String> fieldErrors = const {};
+
+  String? errorFor(String field) => fieldErrors[field];
+
   /// Set when step 1 finds the number already belongs to an account.
   AccountLookupResult? existingAccount;
 
@@ -121,6 +128,7 @@ class RegistrationFlowViewModel extends ChangeNotifier {
   void updateDraft(RegistrationDraft Function(RegistrationDraft) change) {
     draft = change(draft);
     error = null;
+    fieldErrors = const {};
     notifyListeners();
     _repository.saveDraft(draft);
   }
@@ -233,6 +241,33 @@ class RegistrationFlowViewModel extends ChangeNotifier {
     if (path != null) updateDraft((d) => d.copyWith(selfiePath: path));
   }
 
+  /// Confirms the typed CNIC before leaving step 7: the 13 digits first, then
+  /// whether that identity is already registered to someone.
+  Future<void> submitCnic() async {
+    final malformed = fieldProblemsFor(RegistrationStep.cnic);
+    if (malformed.isNotEmpty) {
+      fieldErrors = malformed;
+      error = malformed['cnicNumber'];
+      notifyListeners();
+      return;
+    }
+
+    busy = true;
+    notifyListeners();
+
+    final holder = await _repository.cnicHolder(draft.cnicNumber);
+    busy = false;
+
+    if (holder != null) {
+      error = 'This CNIC is already registered to $holder.';
+      fieldErrors = {'cnicNumber': error!};
+      notifyListeners();
+      return;
+    }
+
+    next();
+  }
+
   // --- Step 5: the OTP ---------------------------------------------------
 
   Future<void> requestOtp() async {
@@ -318,6 +353,7 @@ class RegistrationFlowViewModel extends ChangeNotifier {
     final problem = validationFor(step);
     if (problem != null) {
       error = problem;
+      fieldErrors = fieldProblemsFor(step);
       notifyListeners();
       return;
     }
@@ -361,6 +397,7 @@ class RegistrationFlowViewModel extends ChangeNotifier {
     step = target;
     stage = RegistrationStage.wizard;
     error = null;
+    fieldErrors = const {};
     // The furthest step reached is what "You stopped at step n of 8" names.
     final furthest = target.index > draft.stepIndex
         ? target.index
@@ -406,6 +443,10 @@ class RegistrationFlowViewModel extends ChangeNotifier {
 
       case RegistrationStep.media:
         if (draft.role == RegistrationRole.installer) {
+          for (final link in draft.videoLinks) {
+            final malformed = videoLinkProblem(link);
+            if (malformed != null) return malformed;
+          }
           final filled = draft.videoLinks
               .where((link) => link.trim().isNotEmpty)
               .length;
@@ -448,6 +489,73 @@ class RegistrationFlowViewModel extends ChangeNotifier {
         }
         return null;
     }
+  }
+
+  /// The same checks as [validationFor], keyed by the field each one belongs
+  /// to. Steps whose content is not a set of named inputs return an empty map
+  /// and keep using [error].
+  Map<String, String> fieldProblemsFor(RegistrationStep step) {
+    final problems = <String, String>{};
+
+    switch (step) {
+      case RegistrationStep.details:
+        if (draft.fullName.trim().isEmpty) {
+          problems['fullName'] = 'Enter your full name.';
+        }
+        if (draft.businessName.trim().isEmpty) {
+          problems['businessName'] = 'Enter your business name.';
+        }
+        if (draft.businessAddress.trim().isEmpty) {
+          problems['businessAddress'] = 'Enter your business address.';
+        }
+        if (draft.market == null) {
+          problems['market'] = 'Choose your market.';
+        }
+
+      case RegistrationStep.media:
+        if (draft.role != RegistrationRole.installer) break;
+        for (var i = 0; i < 3; i++) {
+          final link = i < draft.videoLinks.length ? draft.videoLinks[i] : '';
+          final malformed = videoLinkProblem(link);
+          if (malformed != null) {
+            problems['videoLink$i'] = malformed;
+          } else if (i < 2 && link.trim().isEmpty) {
+            problems['videoLink$i'] = 'This link is required.';
+          }
+        }
+
+      case RegistrationStep.cnic:
+        if (draft.cnicNumber.replaceAll(RegExp(r'\D'), '').length != 13) {
+          problems['cnicNumber'] = 'Enter the 13-digit CNIC number.';
+        }
+
+      case RegistrationStep.number:
+      case RegistrationStep.role:
+      case RegistrationStep.otp:
+      case RegistrationStep.source:
+      case RegistrationStep.review:
+        break;
+    }
+
+    return problems;
+  }
+
+  /// A pasted video link has to look like a real web address: an http or
+  /// https scheme and a dotted host. An empty link is not a format problem —
+  /// whether it is required is a separate check.
+  static String? videoLinkProblem(String raw) {
+    final link = raw.trim();
+    if (link.isEmpty) return null;
+
+    final uri = Uri.tryParse(link);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return 'Start the link with http:// or https://.';
+    }
+    final host = uri.host;
+    if (!host.contains('.') || host.startsWith('.') || host.endsWith('.')) {
+      return 'Enter a full web address, like https://youtu.be/abc123.';
+    }
+    return null;
   }
 
   bool get canContinue => validationFor(step) == null;

@@ -125,7 +125,11 @@ class CnicCaptureScreen extends StatelessWidget {
                       final take = capture ?? flow?.captureCnicFront;
                       if (take == null) return;
                       await take();
-                      flow?.openCnicReview();
+                      // A cancelled camera leaves nothing captured, so the
+                      // review screen would have nothing to review.
+                      if (flow != null && flow.draft.cnicFrontPath != null) {
+                        flow.openCnicReview();
+                      }
                     },
                     child: Container(
                       width: 70,
@@ -350,9 +354,10 @@ class _CnicNumberScreenState extends State<CnicNumberScreen> {
           children: [
             DsButton(
               label: 'Yes, This Is Correct',
+              loading: flow?.busy ?? false,
               onPressed: flow == null
                   ? () => PreviewJourney.next(context)
-                  : flow.next,
+                  : flow.submitCnic,
             ),
             const SizedBox(height: 10),
             DsButton(
@@ -365,44 +370,54 @@ class _CnicNumberScreenState extends State<CnicNumberScreen> {
         ),
       ),
       children: [
-        const DsBody(
-          'We read this number from your CNIC photo. Please check every digit '
-          'before continuing — a wrong number delays approval.',
+        DsBody(
+          // Nothing reads the image yet, so the prototype must not claim a
+          // number came off it — it asks for one instead.
+          flow == null
+              ? 'We read this number from your CNIC photo. Please check every '
+                    'digit before continuing — a wrong number delays approval.'
+              : 'Type the 13-digit number exactly as it appears on your CNIC. '
+                    'A wrong number delays approval.',
           size: 14,
         ),
-        DsCard(
-          tone: DsCardTone.sunken,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'READ FROM IMAGE',
-                style: TextStyle(
-                  fontSize: 11,
-                  letterSpacing: 0.06 * 11,
-                  fontWeight: FontWeight.w600,
-                  color: context.palette.textTertiary,
+        // The design's "read from image" panel only makes sense once something
+        // was actually read off the photo.
+        if (flow == null)
+          DsCard(
+            tone: DsCardTone.sunken,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'READ FROM IMAGE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 0.06 * 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.palette.textTertiary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                '35202-7719480-3',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'monospace',
+                const SizedBox(height: 6),
+                const Text(
+                  '35202-7719480-3',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         DsInput(
           label: 'CNIC number',
+          placeholder: '35202-1234567-8',
           controller: _cnic,
+          keyboardType: TextInputType.number,
           onChanged: (value) =>
               flow?.updateDraft((d) => d.copyWith(cnicNumber: value)),
           hint: 'Tap to correct any digit that does not match your card.',
-          error: flow?.error,
+          error: flow?.errorFor('cnicNumber'),
         ),
         const DsCaption(
           'If nothing could be read, this field arrives empty and you type the '

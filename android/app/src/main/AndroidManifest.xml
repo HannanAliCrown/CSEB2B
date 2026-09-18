@@ -4,6 +4,9 @@
          current location, which routes a registration to the right market.
          Without the declarations Android returns "permanently denied"
          immediately and no dialog is shown. -->
+    <!-- Map tiles. Flutter only adds this to the debug manifest. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>

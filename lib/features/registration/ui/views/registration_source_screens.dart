@@ -22,12 +22,14 @@ class RegistrationSourceScreen extends StatefulWidget {
 class _RegistrationSourceScreenState extends State<RegistrationSourceScreen> {
   final _controllers = <int, TextEditingController>{};
 
-  /// How many rows are on screen: every source entered so far, plus an empty
-  /// one to add the next, and never fewer than the design's two.
-  int _rowCount(int entered) {
-    final needed = entered + 1;
-    return needed < 2 ? 2 : needed;
-  }
+  /// Rows the partner has asked for. One source is required, so the step
+  /// opens with a single row; "Add Another Source" adds the next one.
+  int _requestedRows = 1;
+
+  /// Never fewer rows than there are sources already entered, so a resumed
+  /// draft shows everything it holds.
+  int _rowCount(int entered) =>
+      _requestedRows > entered ? _requestedRows : entered;
 
   @override
   void dispose() {
@@ -118,7 +120,9 @@ class _RegistrationSourceScreenState extends State<RegistrationSourceScreen> {
           label: 'Add Another Source',
           variant: DsButtonVariant.secondary,
           icon: LucideIcons.plus,
-          onPressed: flow == null ? () {} : () => setState(() {}),
+          onPressed: flow == null
+              ? () {}
+              : () => setState(() => _requestedRows = rows + 1),
         ),
         DsCard(
           tone: DsCardTone.sunken,

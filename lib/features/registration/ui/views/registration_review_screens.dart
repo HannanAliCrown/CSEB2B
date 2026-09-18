@@ -18,7 +18,10 @@ class RegistrationReviewScreen extends StatefulWidget {
 }
 
 class _RegistrationReviewScreenState extends State<RegistrationReviewScreen> {
-  bool _declared = true;
+  /// Null until the partner touches it. Inside the wizard it starts unticked
+  /// — a declaration nobody made must never be shown as already agreed — and
+  /// the design preview keeps the design's ticked sample.
+  bool? _declared;
 
   static const _sampleRows = [
     ('Mobile number', '+92 300 4821190 · verified', RegistrationStep.number),
@@ -83,9 +86,10 @@ class _RegistrationReviewScreenState extends State<RegistrationReviewScreen> {
       ('Business address', draft.businessAddress, RegistrationStep.details),
       (
         'Market and pin',
-        draft.hasShopPin
-            ? '${draft.market ?? ''} · pin placed'
-            : '${draft.market ?? ''} · no pin placed',
+        [
+          draft.market ?? 'No market chosen',
+          draft.hasShopPin ? 'pin placed' : 'no pin placed',
+        ].join(' · '),
         RegistrationStep.details,
       ),
       ('Media', media, RegistrationStep.media),
@@ -104,6 +108,7 @@ class _RegistrationReviewScreenState extends State<RegistrationReviewScreen> {
   Widget build(BuildContext context) {
     final flow = RegistrationScope.maybeOf(context);
     final rows = flow == null ? _sampleRows : _rowsFor(flow);
+    final declared = _declared ?? (flow == null);
 
     return RegistrationScaffold(
       title: 'Review and Submit',
@@ -115,7 +120,7 @@ class _RegistrationReviewScreenState extends State<RegistrationReviewScreen> {
             DsButton(
               label: 'Submit Registration',
               loading: flow?.busy ?? false,
-              disabled: flow != null && !_declared,
+              disabled: flow != null && !declared,
               onPressed: flow == null
                   ? () => PreviewJourney.next(context)
                   : flow.submitRegistration,
@@ -201,7 +206,7 @@ class _RegistrationReviewScreenState extends State<RegistrationReviewScreen> {
           ),
         ),
         DsCheckbox(
-          checked: _declared,
+          checked: declared,
           label:
               'The information and documents I have given are correct, and '
               'Crown Solar may verify them with my buying source.',

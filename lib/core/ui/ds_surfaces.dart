@@ -163,7 +163,12 @@ class DsMapPlaceholder extends StatelessWidget {
     this.actionLabel,
     this.onAction,
     this.pinColor,
+    this.surface,
   });
+
+  /// Replaces the drawn grid with real map tiles, keeping this frame, the
+  /// coordinates row and the action. Null keeps the design's placeholder.
+  final Widget? surface;
 
   /// A null height fills whatever vertical space the parent allows.
   final double? height;
@@ -174,16 +179,18 @@ class DsMapPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surface = CustomPaint(
-      painter: _MapGridPainter(),
-      child: Center(
-        child: Icon(
-          LucideIcons.mapPin,
-          size: 26,
-          color: pinColor ?? context.colors.error,
-        ),
-      ),
-    );
+    final body =
+        surface ??
+        CustomPaint(
+          painter: _MapGridPainter(),
+          child: Center(
+            child: Icon(
+              LucideIcons.mapPin,
+              size: 26,
+              color: pinColor ?? context.colors.error,
+            ),
+          ),
+        );
 
     return Container(
       clipBehavior: Clip.hardEdge,
@@ -195,9 +202,9 @@ class DsMapPlaceholder extends StatelessWidget {
       child: Column(
         children: [
           if (height == null)
-            Expanded(child: SizedBox.expand(child: surface))
+            Expanded(child: SizedBox.expand(child: body))
           else
-            SizedBox(height: height, child: surface),
+            SizedBox(height: height, child: body),
           if (coordinates != null || actionLabel != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

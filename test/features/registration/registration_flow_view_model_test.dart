@@ -57,8 +57,8 @@ Future<RegistrationFlowViewModel> _fillTo(
   if (stop == RegistrationStep.media) return model;
 
   if (role == RegistrationRole.installer) {
-    model.setVideoLink(0, 'youtu.be/one');
-    model.setVideoLink(1, 'youtu.be/two');
+    model.setVideoLink(0, 'https://youtu.be/one');
+    model.setVideoLink(1, 'https://youtu.be/two');
   } else {
     await model.captureShopImage('Shop Board', MediaSource.camera);
     await model.captureShopImage('Shop Image', MediaSource.gallery);
@@ -137,11 +137,38 @@ void main() {
       final model = _build().model;
       await _fillTo(model, RegistrationStep.media);
 
-      model.setVideoLink(0, 'youtu.be/only-one');
+      model.setVideoLink(0, 'https://youtu.be/only-one');
       model.next();
 
       expect(model.step, RegistrationStep.media);
       expect(model.error, isNotNull);
+      expect(
+        model.errorFor('videoLink1'),
+        isNotNull,
+        reason: 'the message sits under the link that is missing',
+      );
+      expect(model.errorFor('videoLink0'), isNull);
+    });
+
+    test('REG-05b a link without http or a dot is rejected', () async {
+      final model = _build().model;
+      await _fillTo(model, RegistrationStep.media);
+
+      model.setVideoLink(0, 'youtu.be/one');
+      model.setVideoLink(1, 'https://youtu.be/two');
+      model.next();
+
+      expect(model.step, RegistrationStep.media);
+      expect(model.errorFor('videoLink0'), contains('http'));
+
+      model.setVideoLink(0, 'https://localhost/one');
+      model.next();
+      expect(model.step, RegistrationStep.media);
+      expect(model.errorFor('videoLink0'), contains('full web address'));
+
+      model.setVideoLink(0, 'https://youtu.be/one');
+      model.next();
+      expect(model.step, RegistrationStep.otp);
     });
 
     test('REG-06 a wrong OTP keeps the step and the draft', () async {
@@ -288,6 +315,57 @@ void main() {
       expect(model.step, RegistrationStep.number);
       expect(model.draft.fullName, isEmpty);
       expect(await drafts.read(), isNull);
+    });
+
+    test('each details field carries its own message', () async {
+      final model = _build().model;
+      await _fillTo(model, RegistrationStep.details);
+
+      model.next();
+
+      expect(model.step, RegistrationStep.details);
+      expect(model.errorFor('fullName'), 'Enter your full name.');
+      expect(model.errorFor('businessName'), 'Enter your business name.');
+      expect(model.errorFor('businessAddress'), 'Enter your business address.');
+      expect(model.errorFor('market'), 'Choose your market.');
+
+      model.updateDraft((d) => d.copyWith(fullName: 'Test Partner'));
+      expect(
+        model.errorFor('businessName'),
+        isNull,
+        reason: 'editing clears the messages so they do not go stale',
+      );
+    });
+
+    test('a CNIC already on an account is refused', () async {
+      final model = _build().model;
+      await _fillTo(model, RegistrationStep.cnic);
+      await model.captureCnicFront();
+      await model.captureCnicBack();
+      await model.captureSelfie();
+
+      // Seeded to Adnan Solar Works.
+      model.updateDraft((d) => d.copyWith(cnicNumber: '35202-7719480-3'));
+      await model.submitCnic();
+
+      expect(model.step, RegistrationStep.cnic);
+      expect(model.errorFor('cnicNumber'), contains('Adnan Solar Works'));
+
+      model.updateDraft((d) => d.copyWith(cnicNumber: '35202-5550001-9'));
+      await model.submitCnic();
+
+      expect(model.step, RegistrationStep.review);
+    });
+
+    test('a short CNIC never reaches the lookup', () async {
+      final model = _build().model;
+      await _fillTo(model, RegistrationStep.cnic);
+
+      model.updateDraft((d) => d.copyWith(cnicNumber: '35202-771'));
+      await model.submitCnic();
+
+      expect(model.errorFor('cnicNumber'), 'Enter the 13-digit CNIC number.');
+      expect(model.step, RegistrationStep.cnic);
     });
 
     test('moving back keeps everything that was entered', () async {
