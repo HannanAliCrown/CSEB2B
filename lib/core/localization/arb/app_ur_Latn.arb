@@ -1,0 +1,74 @@
+{
+  "@@locale": "ur_Latn",
+  "appTitle": "Crown Solar Energy",
+  "routeNotFoundTitle": "Page nahi mila",
+  "routeNotFoundMessage": "Jo route maanga gaya hai wo mojood nahi hai.",
+
+  "authMobileNumberLabel": "Registered mobile number",
+  "authMobileNumberHint": "misaal: +923001234567",
+  "authKeepSignedIn": "Mujhe sign in rakhein",
+  "authContinueAction": "Continue karein",
+  "authAccountNotFound": "Is mobile number se koi account nahi mila.",
+  "authSignInHeading": "Sign in karein",
+  "authSignInSubtitle": "Crown Solar ke saath registered mobile number istemal karein.",
+  "authDevicePolicyNotice": "Aap ka account ek waqt mein ek hi phone par chalta hai. Naye phone par sign in ke liye ek SMS code darkar hoga.",
+  "authSignInAction": "Sign In",
+  "authRegisterPrompt": "Crown Solar par naye hain?",
+  "authRegisterAction": "Register karein",
+
+  "registrationTitle": "Ye device register karein",
+  "registrationOtpPrompt": "Is device ko active karne ke liye apne mobile number par bheja gaya code darj karein.",
+  "registrationAlreadyRegistered": "Is account ki pehle se ek active device mojood hai. Iske bajaye sign in karein.",
+  "registrationSuccess": "Registration mukammal ho gayi. Ye device ab aap ke account ke liye active hai.",
+  "registrationFailed": "Registration mukammal nahi ho saki. Dobara koshish karein.",
+
+  "otpCodeLabel": "Verification code",
+  "otpVerifyAction": "Verify karein",
+  "otpInvalidCode": "Ye code sahi nahi hai. Dobara koshish karein.",
+  "otpPrototypeCodeNotice": "Sirf prototype — verification code: {code}",
+  "@otpPrototypeCodeNotice": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "otpEnterCodeTitle": "6-digit code darj karein",
+  "otpSentTo": "{number} par SMS ke zariye bheja gaya. Ye ek naya phone hai, is liye sign in se pehle iski tasdeeq ki jaati hai.",
+  "@otpSentTo": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "otpResendAction": "Code dobara bhejein",
+  "otpVerifyAndSignInAction": "Verify karein aur sign in karein",
+
+  "loginNewDeviceNotice": "Ye aap ke account ki mamool wali device nahi hai. Tasdeeq ke liye bheja gaya code darj karein.",
+  "loginTrustedSuccess": "Sign in ho gaya.",
+  "loginSecondDeviceMoveNotice": "Ye aap ke account ki registration ke baad pehli device tabdeeli hai. Iske baad har tabdeeli ke liye Crown Solar CRM ki ijazat darkar hogi.",
+  "loginAuthorizationPending": "Is device ke istemal ki darkhwast ki manzoori ka intezar hai. Baad mein dobara dekhein.",
+  "loginAuthorizationRetry": "Dobara check karein",
+  "loginAuthorizationNotAuthorized": "Is device ko aap ke account ke istemal ki ijazat nahi di gayi. Aap ki doosri device active rahegi.",
+  "loginRebindingSuccess": "Ye device ab aap ke account ke liye active hai.",
+  "loginRebindingFailed": "Hum aap ke account ko is device par transfer nahi kar sake. Dobara koshish karein.",
+  "loginDeviceLockedTitle": "Aap ka account doosre phone ke saath fix hai",
+  "loginDeviceLockedBody": "Aap apna account pehle hi ek baar transfer kar chuke hain. Aap ka doosra phone mamool ke mutabiq kaam kar raha hai — wahan kuch bhi block ya suspend nahi hai.",
+  "loginCrmHelpTitle": "Agar aap wo phone istemal nahi kar sakte",
+  "loginCrmHelpBody": "Kho jana, chori hona, bik jana ya toot jana — Crown Solar CRM naye phone par move ki ijazat de sakta hai. Wo poochenge ke kya hua aur record karenge.",
+  "loginCallCrmAction": "CRM ko call karein",
+  "loginNoPasswordResetNotice": "Ye password ka masla nahi hai, is liye yahan password reset ki sahulat nahi di jaati.",
+  "loginCrmAuthorizedTitle": "Crown Solar CRM ne is move ki ijazat de di hai",
+  "loginCrmAuthorizedBody": "Move mukammal karne ke liye is phone ki tasdeeq karein.",
+  "loginOneMoveOnlyNotice": "Ye ijazat sirf ek move ke liye hai. Is phone ki tasdeeq hote hi aap ka account dobara isi par lock ho jayega.",
+  "loginOldDeviceSignOutNotice": "Aap ka purana phone sign out ho jayega aur ab aap ka account nahi khol sakega.",
+  "loginSessionExpiredNotice": "Aap ka session khatam hone ki wajah se aap ko sign out kar diya gaya tha. Jaari rakhne ke liye dobara sign in karein — ye device ki tabdeeli nahi hai, aur is phone par kisi code ki zaroorat nahi.",
+  "loginDeviceConflictTitle": "Ye phone doosre account mein sign in hai",
+  "loginDeviceConflictBody": "Jaari rakhne se wo doosra account is phone se sign out ho jayega aur aap ka account yahan move ho jayega. Doosra account delete nahi hota — wo apne phone par dobara sign in kar sakte hain.",
+  "loginDeviceConflictConfirm": "Jaari rakhein aur tasdeeq karein",
+  "loginDeviceConflictCancel": "Cancel karein",
+
+  "homeWelcomeMessage": "Aap sign in hain.",
+  "homeLogoutAction": "Sign out"
+}

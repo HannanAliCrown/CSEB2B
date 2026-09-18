@@ -1,0 +1,226 @@
+{
+  "@@locale": "en",
+  "appTitle": "Crown Solar Energy",
+  "@appTitle": {
+    "description": "Application name shown in the OS task switcher and app bars."
+  },
+  "routeNotFoundTitle": "Page not found",
+  "@routeNotFoundTitle": {
+    "description": "Title of the router error screen."
+  },
+  "routeNotFoundMessage": "The requested route does not exist.",
+  "@routeNotFoundMessage": {
+    "description": "Body of the router error screen."
+  },
+
+  "authMobileNumberLabel": "Registered mobile number",
+  "@authMobileNumberLabel": {
+    "description": "Label for the mobile number input shared by registration and login."
+  },
+  "authMobileNumberHint": "e.g. +923001234567",
+  "@authMobileNumberHint": {
+    "description": "Placeholder hint for the mobile number input."
+  },
+  "authKeepSignedIn": "Keep me signed in",
+  "@authKeepSignedIn": {
+    "description": "Label for the Keep Me Signed In checkbox on the login screen."
+  },
+  "authContinueAction": "Continue",
+  "@authContinueAction": {
+    "description": "Primary action button on login/registration mobile-number entry."
+  },
+  "authAccountNotFound": "We couldn't find an account with that mobile number.",
+  "@authAccountNotFound": {
+    "description": "Shown when the submitted mobile number has no matching account."
+  },
+  "authSignInHeading": "Sign in",
+  "@authSignInHeading": {
+    "description": "Heading on the Login screen (Claude Design A1)."
+  },
+  "authSignInSubtitle": "Use the mobile number registered with Crown Solar.",
+  "@authSignInSubtitle": {
+    "description": "Subtitle under the Sign in heading (Claude Design A1)."
+  },
+  "authDevicePolicyNotice": "Your account works on one phone at a time. Signing in on a new phone needs an SMS code.",
+  "@authDevicePolicyNotice": {
+    "description": "Persistent device-binding policy banner on the Login screen (Claude Design A1), stated up front so the OTP screen is never a surprise."
+  },
+  "authSignInAction": "Sign In",
+  "@authSignInAction": {
+    "description": "Primary action on the Login screen and the session-expired screen (Claude Design A1, B3)."
+  },
+  "authRegisterPrompt": "New to Crown Solar?",
+  "@authRegisterPrompt": {
+    "description": "Prefix text before the Register link on the Login screen (Claude Design A1). Registration itself is a separate feature."
+  },
+  "authRegisterAction": "Register",
+  "@authRegisterAction": {
+    "description": "Link text that navigates to the existing Registration screen (Claude Design A1)."
+  },
+
+  "registrationTitle": "Register this device",
+  "@registrationTitle": {
+    "description": "Title of the registration screen."
+  },
+  "registrationOtpPrompt": "Enter the verification code sent to your mobile number to activate this device.",
+  "@registrationOtpPrompt": {
+    "description": "Instructional copy shown once a registration OTP has been requested."
+  },
+  "registrationAlreadyRegistered": "This account already has an active device. Try signing in instead.",
+  "@registrationAlreadyRegistered": {
+    "description": "Shown when registration is attempted for an account that already has an Active device."
+  },
+  "registrationSuccess": "Registration complete. This device is now active for your account.",
+  "@registrationSuccess": {
+    "description": "Shown after a successful registration and initial device binding."
+  },
+  "registrationFailed": "Registration could not be completed. Please try again.",
+  "@registrationFailed": {
+    "description": "Shown when registration OTP verification succeeds but the device could not be activated."
+  },
+
+  "otpCodeLabel": "Verification code",
+  "@otpCodeLabel": {
+    "description": "Label for the OTP entry field, shared by registration and login-context OTP."
+  },
+  "otpVerifyAction": "Verify",
+  "@otpVerifyAction": {
+    "description": "Button that submits an OTP code for verification."
+  },
+  "otpInvalidCode": "That code isn't correct. Please try again.",
+  "@otpInvalidCode": {
+    "description": "Shown when an OTP submission does not match the issued code."
+  },
+  "otpPrototypeCodeNotice": "Prototype only — verification code: {code}",
+  "@otpPrototypeCodeNotice": {
+    "description": "Prototype-only notice surfacing the simulated OTP value; never present in production, since no real SMS provider exists yet.",
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "otpEnterCodeTitle": "Enter the 6-digit code",
+  "@otpEnterCodeTitle": {
+    "description": "Heading on the login-context OTP entry screen (Claude Design A2/A3/B2)."
+  },
+  "otpSentTo": "Sent by SMS to {number}. This is a new phone, so we verify it before signing you in.",
+  "@otpSentTo": {
+    "description": "Subtitle naming the destination of the login-context OTP (Claude Design A2).",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "otpResendAction": "Resend code",
+  "@otpResendAction": {
+    "description": "Action that re-requests a login-context OTP (Claude Design A2/B2 \"Resend\"). No cooldown/countdown is implemented, since none is defined by the business."
+  },
+  "otpVerifyAndSignInAction": "Verify and Sign In",
+  "@otpVerifyAndSignInAction": {
+    "description": "Primary action on the login-context OTP entry screen (Claude Design A2/B2)."
+  },
+
+  "loginNewDeviceNotice": "This isn't your account's usual device. Enter the verification code we sent to confirm it's you.",
+  "@loginNewDeviceNotice": {
+    "description": "Shown when the current device is classified New/Untrusted during login."
+  },
+  "loginTrustedSuccess": "Signed in.",
+  "@loginTrustedSuccess": {
+    "description": "Shown after a successful trusted-device sign-in."
+  },
+  "loginSecondDeviceMoveNotice": "This is your account's first device move since registration. Any move after this will need Crown Solar CRM authorization.",
+  "@loginSecondDeviceMoveNotice": {
+    "description": "Second-device-tier info banner on the OTP entry screen (Claude Design A2) — states the consequence before the user commits. Deliberately does not use the design's literal \"one free move\" phrasing; see spec.md's exact required terminology."
+  },
+  "loginAuthorizationPending": "Your request to use this device is awaiting authorization. Please check back shortly.",
+  "@loginAuthorizationPending": {
+    "description": "Shown while rebinding authorization has not yet been resolved."
+  },
+  "loginAuthorizationRetry": "Check again",
+  "@loginAuthorizationRetry": {
+    "description": "Button that re-checks rebinding authorization status."
+  },
+  "loginAuthorizationNotAuthorized": "This device hasn't been authorized to use your account. Your other device remains active.",
+  "@loginAuthorizationNotAuthorized": {
+    "description": "Shown when rebinding authorization resolves to Not Authorized."
+  },
+  "loginRebindingSuccess": "This device is now active for your account.",
+  "@loginRebindingSuccess": {
+    "description": "Shown after a successful, authorized rebinding."
+  },
+  "loginRebindingFailed": "We couldn't switch your account to this device. Please try again.",
+  "@loginRebindingFailed": {
+    "description": "Shown when an authorized rebinding attempt fails to complete."
+  },
+  "loginDeviceLockedTitle": "Your account is fixed to another phone",
+  "@loginDeviceLockedTitle": {
+    "description": "Heading on the third-or-later-tier refused state (Claude Design B1), shown for both Pending and Not Authorized outcomes."
+  },
+  "loginDeviceLockedBody": "You have already moved your account once. Your other phone keeps working normally — nothing is blocked or suspended there.",
+  "@loginDeviceLockedBody": {
+    "description": "Body copy on the B1 refused state. Deliberately does not name the other device (e.g. by masked number), since that identifier is not exposed by the current AuthService contract."
+  },
+  "loginCrmHelpTitle": "If you cannot use that phone",
+  "@loginCrmHelpTitle": {
+    "description": "Secondary card heading on the B1 refused state."
+  },
+  "loginCrmHelpBody": "Lost, stolen, sold or broken — Crown Solar CRM can allow a move to a new phone. They will ask what happened and record it.",
+  "@loginCrmHelpBody": {
+    "description": "Secondary card body on the B1 refused state."
+  },
+  "loginCallCrmAction": "Call CRM",
+  "@loginCallCrmAction": {
+    "description": "Button on the B1 refused state. This app never implements CRM screens itself (FR-029) — this is a contact action only."
+  },
+  "loginNoPasswordResetNotice": "This is not a password problem, so no password reset is offered here.",
+  "@loginNoPasswordResetNotice": {
+    "description": "Footnote on the B1 refused state clarifying why no password-reset action exists."
+  },
+  "loginCrmAuthorizedTitle": "Crown Solar CRM has authorized this move",
+  "@loginCrmAuthorizedTitle": {
+    "description": "Success-tone banner heading on the third-or-later-tier authorized OTP screen (Claude Design B2)."
+  },
+  "loginCrmAuthorizedBody": "Verify this phone to complete the move.",
+  "@loginCrmAuthorizedBody": {
+    "description": "Success-tone banner body on the B2 authorized OTP screen. Does not state an authorization timestamp, since none is exposed by the current AuthService contract."
+  },
+  "loginOneMoveOnlyNotice": "This authorization covers one move only. Once this phone is verified, your account locks to it again.",
+  "@loginOneMoveOnlyNotice": {
+    "description": "Info row on the B2 authorized OTP screen."
+  },
+  "loginOldDeviceSignOutNotice": "Your old phone will be signed out and will no longer be able to open your account.",
+  "@loginOldDeviceSignOutNotice": {
+    "description": "Info row on the B2 authorized OTP screen."
+  },
+  "loginSessionExpiredNotice": "You were signed out because your session ended. Sign in again to continue — this is not a device change, and no code is needed on this phone.",
+  "@loginSessionExpiredNotice": {
+    "description": "Info banner on the session-expired sign-in screen (Claude Design B3)."
+  },
+  "loginDeviceConflictTitle": "This phone is signed in to another account",
+  "@loginDeviceConflictTitle": {
+    "description": "Heading of the A4 takeover-confirmation dialog."
+  },
+  "loginDeviceConflictBody": "Continuing will sign that other account out of this phone and move your account here. The other account is not deleted — they can sign back in on their own phone.",
+  "@loginDeviceConflictBody": {
+    "description": "Body of the A4 dialog. Does not name the other account by display name/role, since AuthService's conflict outcome currently exposes only an account id — see the implementation report."
+  },
+  "loginDeviceConflictConfirm": "Continue and Verify",
+  "@loginDeviceConflictConfirm": {
+    "description": "Primary button on the A4 dialog."
+  },
+  "loginDeviceConflictCancel": "Cancel",
+  "@loginDeviceConflictCancel": {
+    "description": "Secondary button on the A4 dialog. Declining performs no writes at all (FR-014)."
+  },
+
+  "homeWelcomeMessage": "You're signed in.",
+  "@homeWelcomeMessage": {
+    "description": "Placeholder authenticated-home message; not final CSE product UI."
+  },
+  "homeLogoutAction": "Sign out",
+  "@homeLogoutAction": {
+    "description": "Button that ends the local session without unbinding the device."
+  }
+}

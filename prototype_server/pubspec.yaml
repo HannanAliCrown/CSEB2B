@@ -1,0 +1,19 @@
+name: prototype_server
+description: >
+  Local prototype backend for the Crown Solar Energy "Login, Authentication,
+  and Device Binding" feature. Prototype-only: not the production security
+  boundary. See README.md.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  postgres: ^3.5.0
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^5.0.0

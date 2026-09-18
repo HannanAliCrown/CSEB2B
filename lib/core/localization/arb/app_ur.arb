@@ -1,0 +1,74 @@
+{
+  "@@locale": "ur",
+  "appTitle": "کراؤن سولر انرجی",
+  "routeNotFoundTitle": "صفحہ نہیں ملا",
+  "routeNotFoundMessage": "مطلوبہ راستہ موجود نہیں ہے۔",
+
+  "authMobileNumberLabel": "رجسٹرڈ موبائل نمبر",
+  "authMobileNumberHint": "مثال: +923001234567",
+  "authKeepSignedIn": "مجھے سائن ان رکھیں",
+  "authContinueAction": "جاری رکھیں",
+  "authAccountNotFound": "اس موبائل نمبر سے کوئی اکاؤنٹ نہیں ملا۔",
+  "authSignInHeading": "سائن ان کریں",
+  "authSignInSubtitle": "کراؤن سولر کے ساتھ رجسٹرڈ موبائل نمبر استعمال کریں۔",
+  "authDevicePolicyNotice": "آپ کا اکاؤنٹ ایک وقت میں ایک ہی فون پر چلتا ہے۔ نئے فون پر سائن ان کے لیے ایک SMS کوڈ درکار ہوگا۔",
+  "authSignInAction": "سائن ان کریں",
+  "authRegisterPrompt": "کراؤن سولر پر نئے ہیں؟",
+  "authRegisterAction": "رجسٹر کریں",
+
+  "registrationTitle": "یہ ڈیوائس رجسٹر کریں",
+  "registrationOtpPrompt": "اس ڈیوائس کو فعال کرنے کے لیے اپنے موبائل نمبر پر بھیجا گیا تصدیقی کوڈ درج کریں۔",
+  "registrationAlreadyRegistered": "اس اکاؤنٹ کی پہلے سے ایک فعال ڈیوائس موجود ہے۔ اس کے بجائے سائن ان کریں۔",
+  "registrationSuccess": "رجسٹریشن مکمل ہو گئی۔ یہ ڈیوائس اب آپ کے اکاؤنٹ کے لیے فعال ہے۔",
+  "registrationFailed": "رجسٹریشن مکمل نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔",
+
+  "otpCodeLabel": "تصدیقی کوڈ",
+  "otpVerifyAction": "تصدیق کریں",
+  "otpInvalidCode": "یہ کوڈ درست نہیں ہے۔ براہ کرم دوبارہ کوشش کریں۔",
+  "otpPrototypeCodeNotice": "صرف پروٹوٹائپ — تصدیقی کوڈ: {code}",
+  "@otpPrototypeCodeNotice": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "otpEnterCodeTitle": "6 ہندسوں کا کوڈ درج کریں",
+  "otpSentTo": "{number} پر SMS کے ذریعے بھیجا گیا۔ یہ ایک نیا فون ہے، اس لیے سائن ان سے پہلے اس کی تصدیق کی جاتی ہے۔",
+  "@otpSentTo": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "otpResendAction": "کوڈ دوبارہ بھیجیں",
+  "otpVerifyAndSignInAction": "تصدیق کریں اور سائن ان کریں",
+
+  "loginNewDeviceNotice": "یہ آپ کے اکاؤنٹ کی معمول کی ڈیوائس نہیں ہے۔ تصدیق کے لیے بھیجا گیا کوڈ درج کریں۔",
+  "loginTrustedSuccess": "سائن ان ہو گیا۔",
+  "loginSecondDeviceMoveNotice": "یہ آپ کے اکاؤنٹ کی رجسٹریشن کے بعد پہلی ڈیوائس تبدیلی ہے۔ اس کے بعد ہر تبدیلی کے لیے کراؤن سولر CRM کی اجازت درکار ہوگی۔",
+  "loginAuthorizationPending": "اس ڈیوائس کے استعمال کی درخواست کی منظوری کا انتظار ہے۔ براہ کرم بعد میں دوبارہ دیکھیں۔",
+  "loginAuthorizationRetry": "دوبارہ چیک کریں",
+  "loginAuthorizationNotAuthorized": "اس ڈیوائس کو آپ کے اکاؤنٹ کے استعمال کی اجازت نہیں دی گئی۔ آپ کی دوسری ڈیوائس فعال رہے گی۔",
+  "loginRebindingSuccess": "یہ ڈیوائس اب آپ کے اکاؤنٹ کے لیے فعال ہے۔",
+  "loginRebindingFailed": "ہم آپ کے اکاؤنٹ کو اس ڈیوائس پر منتقل نہیں کر سکے۔ براہ کرم دوبارہ کوشش کریں۔",
+  "loginDeviceLockedTitle": "آپ کا اکاؤنٹ دوسرے فون کے ساتھ مقرر ہے",
+  "loginDeviceLockedBody": "آپ اپنا اکاؤنٹ پہلے ہی ایک بار منتقل کر چکے ہیں۔ آپ کا دوسرا فون معمول کے مطابق کام کر رہا ہے — وہاں کچھ بھی بلاک یا معطل نہیں ہے۔",
+  "loginCrmHelpTitle": "اگر آپ وہ فون استعمال نہیں کر سکتے",
+  "loginCrmHelpBody": "کھو جانا، چوری ہونا، بک جانا یا ٹوٹ جانا — کراؤن سولر CRM نئے فون پر منتقلی کی اجازت دے سکتا ہے۔ وہ پوچھیں گے کہ کیا ہوا اور اسے ریکارڈ کریں گے۔",
+  "loginCallCrmAction": "CRM کو کال کریں",
+  "loginNoPasswordResetNotice": "یہ پاس ورڈ کا مسئلہ نہیں ہے، اس لیے یہاں پاس ورڈ ری سیٹ کی پیشکش نہیں کی جاتی۔",
+  "loginCrmAuthorizedTitle": "کراؤن سولر CRM نے اس تبدیلی کی اجازت دے دی ہے",
+  "loginCrmAuthorizedBody": "تبدیلی مکمل کرنے کے لیے اس فون کی تصدیق کریں۔",
+  "loginOneMoveOnlyNotice": "یہ اجازت صرف ایک تبدیلی کے لیے ہے۔ اس فون کی تصدیق ہوتے ہی آپ کا اکاؤنٹ دوبارہ اسی پر مقرر ہو جائے گا۔",
+  "loginOldDeviceSignOutNotice": "آپ کا پرانا فون سائن آؤٹ ہو جائے گا اور اب آپ کا اکاؤنٹ نہیں کھول سکے گا۔",
+  "loginSessionExpiredNotice": "آپ کا سیشن ختم ہونے کی وجہ سے آپ کو سائن آؤٹ کر دیا گیا تھا۔ جاری رکھنے کے لیے دوبارہ سائن ان کریں — یہ ڈیوائس کی تبدیلی نہیں ہے، اور اس فون پر کسی کوڈ کی ضرورت نہیں۔",
+  "loginDeviceConflictTitle": "یہ فون دوسرے اکاؤنٹ میں سائن ان ہے",
+  "loginDeviceConflictBody": "جاری رکھنے سے وہ دوسرا اکاؤنٹ اس فون سے سائن آؤٹ ہو جائے گا اور آپ کا اکاؤنٹ یہاں منتقل ہو جائے گا۔ دوسرا اکاؤنٹ حذف نہیں ہوتا — وہ اپنے فون پر دوبارہ سائن ان کر سکتے ہیں۔",
+  "loginDeviceConflictConfirm": "جاری رکھیں اور تصدیق کریں",
+  "loginDeviceConflictCancel": "منسوخ کریں",
+
+  "homeWelcomeMessage": "آپ سائن ان ہیں۔",
+  "homeLogoutAction": "سائن آؤٹ"
+}
