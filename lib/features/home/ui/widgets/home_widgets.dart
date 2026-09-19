@@ -264,7 +264,8 @@ class _WalletAction extends StatelessWidget {
 
 /// The promotional slider card and its dot indicator.
 /// One slide's copy, so this widget stays independent of the data layer.
-typedef PromoCopy = ({String eyebrow, String headline});
+/// One slide's content: a picture, text over it, or both.
+typedef PromoCopy = ({String eyebrow, String headline, String? imageUrl});
 
 class HomePromoSlider extends StatefulWidget {
   const HomePromoSlider({
@@ -300,7 +301,8 @@ class _HomePromoSliderState extends State<HomePromoSlider> {
   int _current = 0;
 
   List<PromoCopy> get _slides =>
-      widget.slides ?? [(eyebrow: widget.eyebrow, headline: widget.headline)];
+      widget.slides ??
+      [(eyebrow: widget.eyebrow, headline: widget.headline, imageUrl: null)];
 
   @override
   void initState() {
@@ -358,6 +360,7 @@ class _HomePromoSliderState extends State<HomePromoSlider> {
                 child: _PromoCard(
                   eyebrow: slides[i].eyebrow,
                   headline: slides[i].headline,
+                  imageUrl: slides[i].imageUrl,
                 ),
               ),
             ),
@@ -366,6 +369,7 @@ class _HomePromoSliderState extends State<HomePromoSlider> {
           _PromoCard(
             eyebrow: slides.first.eyebrow,
             headline: slides.first.headline,
+            imageUrl: slides.first.imageUrl,
           ),
         const SizedBox(height: AppSpacing.sm),
         Row(
@@ -394,10 +398,17 @@ class _HomePromoSliderState extends State<HomePromoSlider> {
 }
 
 class _PromoCard extends StatelessWidget {
-  const _PromoCard({required this.eyebrow, required this.headline});
+  const _PromoCard({
+    required this.eyebrow,
+    required this.headline,
+    this.imageUrl,
+  });
 
   final String eyebrow;
   final String headline;
+
+  /// The picture behind the text. Null keeps the brand gradient.
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -418,19 +429,49 @@ class _PromoCard extends StatelessWidget {
         ),
       ),
       child: Stack(
+        fit: StackFit.passthrough,
         children: [
-          Positioned(
-            right: -24,
-            bottom: -24,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: context.palette.crownGold.withValues(alpha: 0.22),
-                shape: BoxShape.circle,
+          // The picture, when the slide has one. It fills the card and sits
+          // under the text; a slide that fails to load falls back to the
+          // gradient rather than showing a broken box.
+          if (imageUrl != null)
+            Positioned.fill(
+              child: Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),
-          ),
+          if (imageUrl == null)
+            Positioned(
+              right: -24,
+              bottom: -24,
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: context.palette.crownGold.withValues(alpha: 0.22),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          // A scrim only where there is a picture, so text stays readable on
+          // whatever was uploaded.
+          if (imageUrl != null)
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      const Color(0xFF04037E).withValues(alpha: 0.85),
+                      const Color(0xFF04037E).withValues(alpha: 0.15),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           Padding(
             // Room for the gold disc in the corner, so the headline does not
             // run across it now that the card is full width.
@@ -532,9 +573,20 @@ class ScanQrCta extends StatelessWidget {
 
 /// The accent-tinted announcement ticker.
 class HomeTicker extends StatefulWidget {
-  const HomeTicker({super.key, required this.message, this.messages});
+  const HomeTicker({
+    super.key,
+    required this.message,
+    this.messages,
+    this.textColour,
+    this.backgroundColour,
+  });
 
   final String message;
+
+  /// The colours the running line uses. Null keeps the app's own, which is
+  /// what every message uses unless one deliberately overrides them.
+  final Color? textColour;
+  final Color? backgroundColour;
 
   /// Every announcement to scroll through, joined into one running line.
   /// With none, [message] is shown still — which is how the design preview
@@ -596,12 +648,12 @@ class _HomeTickerState extends State<HomeTicker>
     final style = TextStyle(
       fontSize: 13,
       fontWeight: FontWeight.w500,
-      color: context.colors.primary,
+      color: widget.textColour ?? context.colors.primary,
     );
 
     return Container(
       width: double.infinity,
-      color: context.palette.accentSoft,
+      color: widget.backgroundColour ?? context.palette.accentSoft,
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: SingleChildScrollView(
         controller: running ? _scroll : null,

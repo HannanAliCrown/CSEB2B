@@ -265,10 +265,10 @@ class RegistrationFlowViewModel extends ChangeNotifier {
     busy = true;
     notifyListeners();
 
-    final holder = await _repository.cnicHolder(draft.cnicNumber);
+    final taken = await _repository.cnicAlreadyRegistered(draft.cnicNumber);
     busy = false;
 
-    if (holder != null) {
+    if (taken) {
       // Whose account it is is not this applicant's business — saying only
       // that it is taken avoids disclosing another partner's identity.
       error = 'A partner is already registered with this CNIC.';

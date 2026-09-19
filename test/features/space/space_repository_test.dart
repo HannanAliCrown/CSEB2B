@@ -66,11 +66,13 @@ void main() {
       final count = before.hearts;
       expect(before.heartedByMe, isFalse);
 
-      final hearted = await space.toggleHeart('P1');
+      final user = _userWithRole(PartnerRole.installer);
+
+      final hearted = (await space.toggleHeart(postId: 'P1', user: user))!;
       expect(hearted.heartedByMe, isTrue);
       expect(hearted.hearts, count + 1);
 
-      final cleared = await space.toggleHeart('P1');
+      final cleared = (await space.toggleHeart(postId: 'P1', user: user))!;
       expect(cleared.heartedByMe, isFalse);
       expect(cleared.hearts, count);
     });

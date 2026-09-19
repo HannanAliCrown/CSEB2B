@@ -81,9 +81,9 @@ class MockRegistrationService implements RegistrationService {
   }
 
   @override
-  Future<String?> cnicHolder(String cnicNumber) async {
+  Future<bool> cnicAlreadyRegistered(String cnicNumber) async {
     await Future<void>.delayed(_latency);
-    return _store.accountForCnic(cnicNumber)?.displayName;
+    return _store.accountForCnic(cnicNumber) != null;
   }
 
   @override
@@ -121,7 +121,29 @@ class MockRegistrationService implements RegistrationService {
   }
 
   @override
-  Future<RegistrationSubmission?> latestSubmission() async => _submission;
+  Future<RegistrationSubmission?> latestSubmission(String mobileNumber) async {
+    // Read back from the same store `submit` wrote to, so the approval screen
+    // finds an application by its number rather than relying on this service
+    // instance having been the one that took it.
+    final pending = PendingRegistrations.find(mobileNumber);
+    if (pending == null) return null;
+
+    RegistrationApprovalState stateOf(Approver approver) =>
+        switch (pending.approvals[approver]!) {
+          ApprovalState.approved => RegistrationApprovalState.approved,
+          ApprovalState.rejected => RegistrationApprovalState.rejected,
+          ApprovalState.outstanding => RegistrationApprovalState.outstanding,
+        };
+
+    return RegistrationSubmission(
+      reference: pending.reference,
+      submittedAt: pending.submittedAt,
+      verifyingSourceName: pending.verifyingSourceName,
+      buyingSourceState: stateOf(Approver.receiver),
+      marketingOfficerState: stateOf(Approver.marketingOfficer),
+      crmState: stateOf(Approver.crm),
+    );
+  }
 
   /// Development support: clears issued OTPs, the submitted application and
   /// any account changes, restoring the deterministic starting state.

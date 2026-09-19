@@ -6,8 +6,8 @@
 import 'dart:convert';
 
 import '../../../core/mock/partner_directory.dart';
-import '../../../core/mock/pending_registrations.dart';
 import '../../../core/prefs/app_preferences.dart';
+import 'session_service.dart';
 import 'signed_in_user.dart';
 
 /// Why a sign-in did not produce a session.
@@ -29,10 +29,17 @@ class SignInResult {
 /// This is the boundary the rest of the app depends on: replacing the
 /// directory lookup with an authentication API changes nothing above it.
 class SessionRepository {
-  SessionRepository({required AppPreferences preferences})
-    : _preferences = preferences;
+  SessionRepository({
+    required AppPreferences preferences,
+    SessionService? service,
+  }) : _preferences = preferences,
+       _service = service ?? const MockSessionService();
 
   final AppPreferences _preferences;
+
+  /// Where "is this number anybody" is answered — the bundled directory, or
+  /// the database behind the server.
+  final SessionService _service;
 
   static const _key = 'session.user';
 
@@ -63,22 +70,13 @@ class SessionRepository {
       return const SignInResult.failed(SignInFailure.malformedNumber);
     }
 
-    // An application submitted on this phone signs in too — to watch its
-    // approvals, not to use the app.
-    final pending = PendingRegistrations.find(mobileNumber);
-    final account = PartnerDirectory.find(mobileNumber);
-    if (pending == null && account == null) {
+    // An application still waiting on approval signs in too — to watch its
+    // approvals, not to use the app. The service decides which this is.
+    final user = await _service.findPartner(mobileNumber);
+    if (user == null) {
       return const SignInResult.failed(SignInFailure.unknownNumber);
     }
 
-    final user = switch ((pending, account)) {
-      // A submitted application, still waiting: signed in, but unapproved.
-      (final p?, _) when !p.isApproved => SignedInUser.fromPending(p),
-      // Approved, or an account that already existed.
-      (_, final a?) => SignedInUser.fromAccount(a),
-      (final p?, _) => SignedInUser.fromPending(p).copyWith(approved: true),
-      _ => throw StateError('unreachable: no pending record and no account'),
-    };
     if (keepSignedIn) {
       await _preferences.writeString(_key, jsonEncode(user.toJson()));
     } else {

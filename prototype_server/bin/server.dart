@@ -4,13 +4,17 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import 'package:prototype_server/data/postgres_auth_data_store.dart';
+import 'package:prototype_server/data/postgres_partner_data_store.dart';
+import 'package:prototype_server/data/postgres_social_data_store.dart';
 import 'package:prototype_server/db/postgres_client.dart';
 import 'package:prototype_server/router.dart';
 
 Future<void> main() async {
   final client = PostgresClient.fromEnvironment();
   final store = PostgresAuthDataStore(client);
-  final router = buildRouter(store);
+  final partners = PostgresPartnerDataStore(client);
+  final social = PostgresSocialDataStore(client);
+  final router = buildRouter(store, partners: partners, social: social);
 
   final pipeline = const Pipeline()
       .addMiddleware(logRequests())

@@ -38,11 +38,22 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _open() async {
     final user = context.read<SessionController>().user;
     if (user == null) return;
-    final repository = context.read<ChatRepository>();
-
-    final thread = await repository.openWith(user, widget.party);
     // Opening a conversation is what clears its unread badge.
-    await repository.markRead(user, widget.party);
+    await context.read<ChatRepository>().markRead(user, widget.party);
+    await _reload();
+  }
+
+  /// Re-reads the conversation rather than trusting the copy this screen was
+  /// handed: a message sent over HTTP comes back as a new thread, not a
+  /// mutated one.
+  Future<void> _reload() async {
+    final user = context.read<SessionController>().user;
+    if (user == null) return;
+
+    final thread = await context.read<ChatRepository>().openWith(
+      user,
+      widget.party,
+    );
     if (!mounted) return;
     setState(() => _thread = thread);
     _scrollToEnd();
@@ -68,9 +79,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
       party: widget.party,
       text: text,
     );
-    if (!mounted) return;
-    setState(() {});
-    _scrollToEnd();
+    await _reload();
   }
 
   @override

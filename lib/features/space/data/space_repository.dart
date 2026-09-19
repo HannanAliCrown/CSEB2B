@@ -74,7 +74,7 @@ class SpacePost {
     required this.body,
     required this.postedAt,
     required this.audience,
-    required this.imageAsset,
+    required this.image,
     this.hearts = 0,
     this.heartedByMe = false,
     List<PostComment>? comments,
@@ -86,8 +86,10 @@ class SpacePost {
   final DateTime postedAt;
   final PostAudience audience;
 
-  /// The picture that goes with the post, if it has one.
-  final String? imageAsset;
+  /// The picture that goes with the post, if it has one. A URL when the post
+  /// came from the database, a bundled asset path in the mock — the card
+  /// decides how to load it.
+  final String? image;
 
   int hearts;
   bool heartedByMe;
@@ -112,16 +114,22 @@ abstract interface class SpaceRepository {
 
   Future<SpacePost?> post(String id);
 
-  /// Turns the heart on or off and returns the new state.
-  Future<SpacePost> toggleHeart(String postId);
+  /// Turns the heart on or off and returns the post as it now stands.
+  ///
+  /// Takes the partner because a heart belongs to someone: how many hearts a
+  /// post has and whether I hearted it are different questions.
+  Future<SpacePost?> toggleHeart({
+    required String postId,
+    required SignedInUser user,
+  });
 
-  Future<PostComment> comment({
+  Future<PostComment?> comment({
     required String postId,
     required SignedInUser user,
     required String body,
   });
 
-  Future<PostReply> reply({
+  Future<PostReply?> reply({
     required String postId,
     required String commentId,
     required SignedInUser user,
@@ -160,7 +168,10 @@ class MockSpaceRepository implements SpaceRepository {
   }
 
   @override
-  Future<SpacePost> toggleHeart(String postId) async {
+  Future<SpacePost?> toggleHeart({
+    required String postId,
+    required SignedInUser user,
+  }) async {
     final post = _posts.firstWhere((p) => p.id == postId);
     post.heartedByMe = !post.heartedByMe;
     post.hearts += post.heartedByMe ? 1 : -1;
@@ -169,7 +180,7 @@ class MockSpaceRepository implements SpaceRepository {
   }
 
   @override
-  Future<PostComment> comment({
+  Future<PostComment?> comment({
     required String postId,
     required SignedInUser user,
     required String body,
@@ -188,7 +199,7 @@ class MockSpaceRepository implements SpaceRepository {
   }
 
   @override
-  Future<PostReply> reply({
+  Future<PostReply?> reply({
     required String postId,
     required String commentId,
     required SignedInUser user,
@@ -221,7 +232,7 @@ class MockSpaceRepository implements SpaceRepository {
             'for attendance. Lunch and the new product briefing are included.',
         postedAt: now.subtract(const Duration(hours: 4)),
         audience: PostAudience.everyone,
-        imageAsset: 'assets/images/crown_solar_logo.png',
+        image: 'assets/images/crown_solar_logo.png',
         hearts: 48,
         comments: [
           PostComment(
@@ -258,7 +269,7 @@ class MockSpaceRepository implements SpaceRepository {
         audience: PostAudience.everyone,
         // The reverse logo is white, so it would be invisible on the light
         // card. Only the standard mark is readable there.
-        imageAsset: 'assets/images/crown_solar_logo.png',
+        image: 'assets/images/crown_solar_logo.png',
         hearts: 122,
         comments: [
           PostComment(
@@ -277,7 +288,7 @@ class MockSpaceRepository implements SpaceRepository {
             'installers appear first when a customer searches their area.',
         postedAt: now.subtract(const Duration(days: 2)),
         audience: PostAudience.installers,
-        imageAsset: null,
+        image: null,
         hearts: 31,
       ),
       SpacePost(
@@ -288,7 +299,7 @@ class MockSpaceRepository implements SpaceRepository {
             'Branding. The supplier calls within three working days.',
         postedAt: now.subtract(const Duration(days: 3)),
         audience: PostAudience.retailers,
-        imageAsset: null,
+        image: null,
         hearts: 64,
       ),
       SpacePost(
@@ -299,7 +310,7 @@ class MockSpaceRepository implements SpaceRepository {
             'band. Your progress is on the Points screen.',
         postedAt: now.subtract(const Duration(days: 4)),
         audience: PostAudience.trade,
-        imageAsset: null,
+        image: null,
         hearts: 18,
       ),
     ];

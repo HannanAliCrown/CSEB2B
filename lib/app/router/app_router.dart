@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -16,8 +17,10 @@ import 'package:cse_b2b/features/auth/ui/views/registration_screen.dart';
 import 'package:cse_b2b/app/shell/app_shell.dart';
 import 'package:cse_b2b/core/prefs/app_preferences.dart';
 import 'package:cse_b2b/features/home/data/dashboard_repository.dart';
+import 'package:cse_b2b/features/home/data/http_dashboard_repository.dart';
 import 'package:cse_b2b/features/scan/data/scan_repository.dart';
 import 'package:cse_b2b/features/chat/data/chat_repository.dart';
+import 'package:cse_b2b/features/chat/data/http_chat_repository.dart';
 import 'package:cse_b2b/features/chat/ui/views/conversation_screen.dart';
 import 'package:cse_b2b/features/chat/ui/views/new_conversation_screen.dart';
 import 'package:cse_b2b/features/profile/data/contacts_repository.dart';
@@ -25,7 +28,9 @@ import 'package:cse_b2b/features/profile/ui/views/my_qr_code_screen.dart';
 import 'package:cse_b2b/features/profile/ui/views/sync_contacts_screen.dart';
 import 'package:cse_b2b/features/scan/ui/views/scan_screen.dart';
 import 'package:cse_b2b/features/session/data/session_repository.dart';
+import 'package:cse_b2b/features/session/data/session_service.dart';
 import 'package:cse_b2b/features/session/ui/session_controller.dart';
+import 'package:cse_b2b/features/space/data/http_space_repository.dart';
 import 'package:cse_b2b/features/space/data/space_repository.dart';
 import 'package:cse_b2b/features/space/ui/views/post_detail_screen.dart';
 import 'package:cse_b2b/features/wallet/data/wallet_repository.dart';
@@ -38,6 +43,7 @@ import 'package:cse_b2b/features/design_preview/preview_gallery_screen.dart';
 import 'package:cse_b2b/features/login/ui/views/sign_in_screen.dart';
 import 'package:cse_b2b/features/registration/data/repositories/registration_repository.dart';
 import 'package:cse_b2b/features/registration/data/services/media_capture_service.dart';
+import 'package:cse_b2b/features/registration/data/services/http_registration_service.dart';
 import 'package:cse_b2b/features/registration/data/services/mock_registration_service.dart';
 import 'package:cse_b2b/features/registration/data/services/registration_draft_store.dart';
 import 'package:cse_b2b/features/registration/data/services/registration_service.dart';
@@ -45,9 +51,28 @@ import 'package:cse_b2b/features/registration/ui/view_models/registration_flow_v
 import 'package:cse_b2b/features/registration/ui/views/approval_status_flow_screen.dart';
 import 'package:cse_b2b/features/registration/ui/views/registration_flow_screen.dart';
 import 'package:cse_b2b/features/onboarding/data/repositories/onboarding_repository.dart';
+import 'package:cse_b2b/features/onboarding/data/services/device_launch_service.dart';
 import 'package:cse_b2b/features/onboarding/data/services/permission_service.dart';
 import 'package:cse_b2b/features/onboarding/ui/view_models/first_launch_view_model.dart';
 import 'package:cse_b2b/features/onboarding/ui/views/first_launch_flow_screen.dart';
+
+/// Where `prototype_server` is, which is where PostgreSQL is reached from.
+/// `10.0.2.2` is the host machine as the Android emulator sees it.
+const String apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://10.0.2.2:8080',
+);
+
+/// Whether the features that have been moved to the database read from it.
+///
+/// Off by default, so a build with no server running still opens on the mock
+/// data everyone knows. Turn it on with
+/// `--dart-define=DATA_SOURCE=server`.
+///
+/// This is a migration switch, not a permanent setting: it goes away once
+/// every feature is server-backed.
+const bool _serverBacked =
+    String.fromEnvironment('DATA_SOURCE', defaultValue: 'mock') == 'server';
 
 /// Route paths, so callers never spell a location as a bare string.
 abstract final class AppRoutes {
@@ -123,12 +148,23 @@ GoRouter createAppRouter({
   final onboarding = OnboardingRepository(
     preferences: prefs,
     permissions: permissions ?? const DevicePermissionService(),
+    launchService: _serverBacked
+        ? HttpDeviceLaunchService(
+            identity: SecureDeviceIdentityStore(),
+            baseUrl: apiBaseUrl,
+            platform: defaultTargetPlatform.name,
+          )
+        : const NoDeviceLaunchService(),
   );
 
   // No registration API exists yet, so the local mock stands in behind the
   // same repository boundary an HTTP service will use later.
   final registration = RegistrationRepository(
-    service: registrationService ?? MockRegistrationService(),
+    service:
+        registrationService ??
+        (_serverBacked
+            ? HttpRegistrationService(baseUrl: apiBaseUrl)
+            : MockRegistrationService()),
     draftStore: registrationDraftStore ?? SharedRegistrationDraftStore(),
   );
   final capture = mediaCapture ?? DeviceMediaCaptureService();
@@ -136,14 +172,25 @@ GoRouter createAppRouter({
   // The signed-in partner, the wallet and the scanner. All three are mocks
   // behind the same repository boundaries their APIs will use later.
   final session = SessionController(
-    repository: SessionRepository(preferences: prefs),
+    repository: SessionRepository(
+      preferences: prefs,
+      service: _serverBacked
+          ? HttpSessionService(baseUrl: apiBaseUrl)
+          : const MockSessionService(),
+    ),
   );
   final wallet = MockWalletRepository();
-  final dashboard = MockDashboardRepository(wallet: wallet);
+  final dashboard = _serverBacked
+      ? HttpDashboardRepository(baseUrl: apiBaseUrl)
+      : MockDashboardRepository(wallet: wallet);
   final scanner = MockScanRepository(wallet: wallet);
   final contacts = DeviceContactsRepository(preferences: prefs);
-  final chat = MockChatRepository();
-  final space = MockSpaceRepository();
+  final chat = _serverBacked
+      ? HttpChatRepository(baseUrl: apiBaseUrl)
+      : MockChatRepository();
+  final space = _serverBacked
+      ? HttpSpaceRepository(baseUrl: apiBaseUrl)
+      : MockSpaceRepository();
 
   /// Everything behind sign-in shares one session and one wallet, so a
   /// transfer made on one screen is the balance another screen shows.
@@ -368,6 +415,7 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.approval,
         builder: (context, state) => ApprovalStatusFlowScreen(
+          repository: registration,
           mobileNumber:
               state.uri.queryParameters['number'] ??
               session.user?.mobileNumber ??

@@ -148,6 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   (
                                     eyebrow: slide.eyebrow,
                                     headline: slide.headline,
+                                    imageUrl: slide.imageUrl,
                                   ),
                               ],
                             ),
@@ -166,8 +167,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (dashboard.tickerMessages.isNotEmpty) ...[
                           const SizedBox(height: AppSpacing.md),
                           HomeTicker(
-                            message: dashboard.tickerMessages.first,
-                            messages: dashboard.tickerMessages,
+                            message: dashboard.tickerMessages.first.text,
+                            messages: [
+                              for (final message in dashboard.tickerMessages)
+                                message.text,
+                            ],
+                            // The line runs as one, so the first message's
+                            // colours are the line's colours.
+                            textColour:
+                                dashboard.tickerMessages.first.textColour,
+                            backgroundColour:
+                                dashboard.tickerMessages.first.backgroundColour,
                           ),
                         ],
                         const SizedBox(height: AppSpacing.md),

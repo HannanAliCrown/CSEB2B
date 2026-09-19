@@ -26,6 +26,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final _focus = FocusNode();
 
   /// The comment being replied to, or null when writing a new comment.
+  /// The post as last read. Starts as the one the feed handed over.
+  late SpacePost _post = widget.post;
+
   PostComment? _replyingTo;
   bool _sending = false;
 
@@ -45,8 +48,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     super.dispose();
   }
 
-  void _refresh() {
-    if (mounted) setState(() {});
+  /// Re-reads the post rather than trusting the copy this screen was given:
+  /// over HTTP a new comment arrives as new objects, not a mutated one.
+  Future<void> _refresh() async {
+    final latest = await context.read<SpaceRepository>().post(widget.post.id);
+    if (!mounted) return;
+    setState(() => _post = latest ?? _post);
   }
 
   Future<void> _send() async {
@@ -86,7 +93,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final post = widget.post;
+    final post = _post;
 
     return Scaffold(
       appBar: DsAppBar(

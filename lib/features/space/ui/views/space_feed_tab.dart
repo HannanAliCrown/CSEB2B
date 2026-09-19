@@ -154,7 +154,7 @@ class PostCard extends StatelessWidget {
               DsTag(label: post.audience.label),
             ],
           ),
-          if (post.imageAsset != null) ...[
+          if (post.image != null) ...[
             const SizedBox(height: AppSpacing.stepMd),
             ClipRRect(
               borderRadius: AppRadii.mdRadius,
@@ -164,7 +164,16 @@ class PostCard extends StatelessWidget {
                 color: context.palette.sunken,
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Image.asset(post.imageAsset!, fit: BoxFit.contain),
+                // A post from the database carries a URL; the bundled seed
+                // carries an asset path. A picture that will not load leaves
+                // the panel empty rather than showing a broken box.
+                child: post.image!.startsWith('http')
+                    ? Image.network(
+                        post.image!,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      )
+                    : Image.asset(post.image!, fit: BoxFit.contain),
               ),
             ),
           ],
@@ -209,7 +218,14 @@ class PostActions extends StatelessWidget {
     return Row(
       children: [
         GestureDetector(
-          onTap: () => context.read<SpaceRepository>().toggleHeart(post.id),
+          onTap: () {
+            final user = context.read<SessionController>().user;
+            if (user == null) return;
+            context.read<SpaceRepository>().toggleHeart(
+              postId: post.id,
+              user: user,
+            );
+          },
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

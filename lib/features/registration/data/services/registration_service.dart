@@ -108,13 +108,26 @@ abstract interface class RegistrationService {
 
   Future<BuyingSourceLookup> lookupBuyingSource(String mobileNumber);
 
-  /// The name on the account already holding this CNIC, or null when it is
-  /// free. One identity never registers twice.
-  Future<String?> cnicHolder(String cnicNumber);
+  /// Whether this identity has already registered. Deliberately a yes or no:
+  /// naming the holder would tell one applicant about another's business.
+  Future<bool> cnicAlreadyRegistered(String cnicNumber);
 
   /// Records the application. Only the first buying source is asked to
   /// verify it; the rest are kept with the request.
   Future<RegistrationSubmission> submit(RegistrationDraft draft);
 
-  Future<RegistrationSubmission?> latestSubmission();
+  /// The most recent application on this number, whatever state it is in.
+  Future<RegistrationSubmission?> latestSubmission(String mobileNumber);
+}
+
+/// A submission the server refused. The message is the one to show: the
+/// wizard has already checked each of these, so reaching one means something
+/// changed between the check and the submit.
+class RegistrationSubmitFailure implements Exception {
+  const RegistrationSubmitFailure(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

@@ -3,20 +3,54 @@
 // linter suggests is not available here.
 // ignore_for_file: prefer_initializing_formals
 
+import 'package:flutter/painting.dart' show Color;
+
 import '../../session/data/signed_in_user.dart';
 import '../../wallet/data/wallet_repository.dart';
 
 /// One merchandising slide on Home.
+///
+/// A slide is a picture with optional text over it. Both are optional
+/// separately, so a picture-only slide and a text-only card are the same
+/// thing with different fields filled in.
 class PromoSlide {
   const PromoSlide({
     required this.id,
     required this.eyebrow,
     required this.headline,
+    this.imageUrl,
   });
 
   final String id;
   final String eyebrow;
   final String headline;
+
+  /// Where the picture is, or null for a text card on the brand gradient.
+  final String? imageUrl;
+}
+
+/// One announcement in Home's running line.
+///
+/// The two colours travel with the message so a scheme can run in its own
+/// colours. Null means the app's own ticker colours — never a colour
+/// invented here.
+class TickerMessage {
+  const TickerMessage({
+    required this.text,
+    this.textColour,
+    this.backgroundColour,
+  });
+
+  final String text;
+  final Color? textColour;
+  final Color? backgroundColour;
+
+  /// '#RRGGBB' as the database stores it. Anything else is treated as no
+  /// colour at all rather than guessed at.
+  static Color? parseColour(String? hex) {
+    if (hex == null || !RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex)) return null;
+    return Color(0xFF000000 | int.parse(hex.substring(1), radix: 16));
+  }
 }
 
 /// What Home shows for the signed-in partner.
@@ -37,7 +71,7 @@ class Dashboard {
   final List<PromoSlide> slides;
 
   /// Each announcement the ticker cycles through.
-  final List<String> tickerMessages;
+  final List<TickerMessage> tickerMessages;
 
   final String scanSubtitle;
 }
@@ -116,20 +150,20 @@ class MockDashboardRepository implements DashboardRepository {
     ],
   };
 
-  List<String> _tickerFor(PartnerRole role) => switch (role) {
+  List<TickerMessage> _tickerFor(PartnerRole role) => switch (role) {
     PartnerRole.installer => const [
-      'Eid scheme live until 30 September',
-      'Scan any Crown Solar box to check it is genuine',
-      'Cash sent before 4pm is settled the same day',
+      TickerMessage(text: 'Eid scheme live until 30 September'),
+      TickerMessage(text: 'Scan any Crown Solar box to check it is genuine'),
+      TickerMessage(text: 'Cash sent before 4pm is settled the same day'),
     ],
     PartnerRole.retailer => const [
-      'Eid scheme live until 30 September',
-      'Frontlit board requests open',
-      'Points expire 90 days after they are earned',
+      TickerMessage(text: 'Eid scheme live until 30 September'),
+      TickerMessage(text: 'Frontlit board requests open'),
+      TickerMessage(text: 'Points expire 90 days after they are earned'),
     ],
     PartnerRole.wholesaler || PartnerRole.distributor => const [
-      'Quarterly targets close 30 September',
-      'New partner profiles need CRM approval',
+      TickerMessage(text: 'Quarterly targets close 30 September'),
+      TickerMessage(text: 'New partner profiles need CRM approval'),
     ],
   };
 }

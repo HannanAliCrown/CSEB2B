@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../../core/mock/pending_registrations.dart';
 import '../../../../core/ui/ds.dart';
+import '../../data/repositories/registration_repository.dart';
+import '../../data/services/registration_service.dart';
 
 /// Where a submitted registration stands, for the partner who submitted it.
 ///
@@ -14,9 +15,14 @@ class ApprovalStatusFlowScreen extends StatefulWidget {
     super.key,
     required this.mobileNumber,
     required this.onBack,
+    required this.repository,
   });
 
   final String mobileNumber;
+
+  /// Where the application is read from — the bundled store, or the database
+  /// behind the server. The screen never knows which.
+  final RegistrationRepository repository;
 
   /// Leaving this screen always returns to sign-in: there is no app behind it
   /// until the account opens.
@@ -27,22 +33,59 @@ class ApprovalStatusFlowScreen extends StatefulWidget {
       _ApprovalStatusFlowScreenState();
 }
 
+/// The three approvals, in the order the screen lists them.
+enum _Approver { buyingSource, marketingOfficer, crm }
+
+extension _ApproverX on _Approver {
+  String get title => switch (this) {
+    _Approver.buyingSource => 'Buying Source',
+    _Approver.marketingOfficer => 'Marketing Officer',
+    _Approver.crm => 'CRM',
+  };
+}
+
 class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
-  PendingRegistration? get _pending =>
-      PendingRegistrations.find(widget.mobileNumber);
+  RegistrationSubmission? _submission;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final submission = await widget.repository.latestSubmission(
+      widget.mobileNumber,
+    );
+    if (!mounted) return;
+    setState(() {
+      _submission = submission;
+      _loaded = true;
+    });
+  }
+
+  RegistrationApprovalState _stateOf(
+    _Approver approver,
+    RegistrationSubmission submission,
+  ) => switch (approver) {
+    _Approver.buyingSource => submission.buyingSourceState,
+    _Approver.marketingOfficer => submission.marketingOfficerState,
+    _Approver.crm => submission.crmState,
+  };
 
   /// Who to call about an outstanding approval.
-  String _detailFor(Approver approver, PendingRegistration pending) =>
+  String _detailFor(_Approver approver, RegistrationSubmission submission) =>
       switch (approver) {
-        Approver.receiver =>
-          pending.verifyingSourceName ?? 'Your first buying source',
-        Approver.marketingOfficer => 'Your area Marketing Officer',
-        Approver.crm => 'Crown Solar customer relations',
+        _Approver.buyingSource =>
+          submission.verifyingSourceName ?? 'Your first buying source',
+        _Approver.marketingOfficer => 'Your area Marketing Officer',
+        _Approver.crm => 'Crown Solar customer relations',
       };
 
   @override
   Widget build(BuildContext context) {
-    final pending = _pending;
+    final submission = _submission;
 
     return PopScope(
       canPop: false,
@@ -53,7 +96,9 @@ class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
         appBar: DsAppBar(title: 'Approval Status', onBack: widget.onBack),
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
         gap: 18,
-        sections: pending == null
+        sections: !_loaded
+            ? [const Center(child: CircularProgressIndicator())]
+            : submission == null
             ? [
                 const DsEmptyState(
                   title: 'No application found',
@@ -64,24 +109,24 @@ class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
                 ),
               ]
             : [
-                _Summary(pending: pending),
+                _Summary(submission: submission),
                 DsCard(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
                   ),
                   child: Column(
                     children: [
-                      for (final approver in Approver.values) ...[
-                        if (approver != Approver.values.first)
+                      for (final approver in _Approver.values) ...[
+                        if (approver != _Approver.values.first)
                           const DsHairline(),
                         _ApproverRow(
                           title: approver.title,
-                          detail: _detailFor(approver, pending),
-                          state: pending.approvals[approver]!,
+                          detail: _detailFor(approver, submission),
+                          state: _stateOf(approver, submission),
                           // Nobody to chase once they have approved.
                           onCall:
-                              pending.approvals[approver] ==
-                                  ApprovalState.outstanding
+                              _stateOf(approver, submission) ==
+                                  RegistrationApprovalState.outstanding
                               ? () => _call(approver)
                               : null,
                         ),
@@ -98,7 +143,7 @@ class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
     );
   }
 
-  void _call(Approver approver) {
+  void _call(_Approver approver) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Calling ${approver.title} is not wired up yet.')),
     );
@@ -106,14 +151,14 @@ class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({required this.pending});
+  const _Summary({required this.submission});
 
-  final PendingRegistration pending;
+  final RegistrationSubmission submission;
 
   @override
   Widget build(BuildContext context) {
-    final received = pending.approvedCount;
-    final total = Approver.values.length;
+    final received = submission.approvalsReceived;
+    final total = _Approver.values.length;
 
     return DsCard(
       radius: AppRadii.heroRadius,
@@ -174,7 +219,7 @@ class _Summary extends StatelessWidget {
             'can come in any order.',
           ),
           const SizedBox(height: AppSpacing.sm),
-          DsCaption('Reference ${pending.reference}'),
+          DsCaption('Reference ${submission.reference}'),
         ],
       ),
     );
@@ -191,13 +236,13 @@ class _ApproverRow extends StatelessWidget {
 
   final String title;
   final String detail;
-  final ApprovalState state;
+  final RegistrationApprovalState state;
   final VoidCallback? onCall;
 
   @override
   Widget build(BuildContext context) {
-    final approved = state == ApprovalState.approved;
-    final rejected = state == ApprovalState.rejected;
+    final approved = state == RegistrationApprovalState.approved;
+    final rejected = state == RegistrationApprovalState.rejected;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 14),
