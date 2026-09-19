@@ -3,16 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/scanner/qr_scanner_screen.dart';
 import '../../../../core/ui/ds.dart';
 import '../../../session/data/signed_in_user.dart';
 import '../../../session/ui/session_controller.dart';
 import '../../data/scan_repository.dart';
 
-/// Scan QR: check a product is genuine, and claim anything it wins.
+/// Scan QR: two jobs behind one camera.
 ///
-/// There is no camera here yet, so the code is entered or picked from the
-/// sample list — the verdict comes from [ScanRepository] either way, never
-/// from this screen.
+/// Authenticity Check answers whether a product is really Crown Solar's and
+/// changes nothing. Scan to Win claims the code and pays what it is worth,
+/// so only the roles that earn from a scan see that tab at all.
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -25,20 +26,46 @@ class _ScanScreenState extends State<ScanScreen> {
   bool _busy = false;
   ScanOutcome? _outcome;
 
+  /// Set from the signed-in role on the first build: a wholesaler or
+  /// distributor only ever checks authenticity.
+  ScanMode? _mode;
+
   @override
   void dispose() {
     _code.dispose();
     super.dispose();
   }
 
+  ScanMode _modeFor(SignedInUser user) =>
+      _mode ??= MockScanRepository.prizeFor(user.role) == null
+      ? ScanMode.authenticity
+      : ScanMode.win;
+
+  /// Reads the code off the product with the camera, then checks it exactly
+  /// as a sample code is checked.
+  Future<void> _scanWithCamera(SignedInUser user) async {
+    final code = await QrScannerScreen.open(
+      context,
+      title: _modeFor(user).label,
+      instruction:
+          'Point the camera at the Crown Solar QR code printed on the box.',
+    );
+    if (!mounted || code == null) return;
+
+    _code.text = code.trim();
+    await _check(user);
+  }
+
   Future<void> _check(SignedInUser user) async {
     final code = _code.text.trim();
     if (code.isEmpty) return;
 
+    final mode = _modeFor(user);
     setState(() => _busy = true);
     final outcome = await context.read<ScanRepository>().check(
       code: code,
       user: user,
+      mode: mode,
     );
     if (!mounted) return;
     setState(() {
@@ -53,11 +80,13 @@ class _ScanScreenState extends State<ScanScreen> {
     if (user == null) return const SizedBox.shrink();
 
     final outcome = _outcome;
+    final mode = _modeFor(user);
+    final canWin = MockScanRepository.prizeFor(user.role) != null;
 
     return Scaffold(
       appBar: DsAppBar(
         title: 'Scan QR',
-        subtitle: user.role.earnsPrizes
+        subtitle: canWin
             ? 'Check a product or claim a prize'
             : 'Check a product is genuine',
         onBack: () => Navigator.of(context).maybePop(),
@@ -66,34 +95,54 @@ class _ScanScreenState extends State<ScanScreen> {
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
         children: [
           if (outcome == null) ...[
-            const DsNotice(
-              icon: LucideIcons.camera,
-              message:
-                  'The camera scanner is not wired up yet. Enter a code from '
-                  'the box, or pick one of the samples below.',
-            ),
-            const SizedBox(height: AppSpacing.md),
-            DsInput(
-              label: 'Product code',
-              placeholder: 'CS-INV-8841',
-              controller: _code,
-              inputFormatters: [UpperCaseTextFormatter()],
-            ),
-            const SizedBox(height: AppSpacing.md),
+            // Roles that cannot win see no tabs rather than a dead one.
+            if (canWin) ...[
+              DsSegmentedControl(
+                options: [ScanMode.authenticity.label, ScanMode.win.label],
+                value: mode.label,
+                onChanged: (value) => setState(
+                  () => _mode = value == ScanMode.win.label
+                      ? ScanMode.win
+                      : ScanMode.authenticity,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
             DsButton(
-              label: 'Check This Code',
-              icon: LucideIcons.scanLine,
-              loading: _busy,
-              onPressed: () => _check(user),
+              label: 'Open Camera',
+              icon: LucideIcons.camera,
+              onPressed: () => _scanWithCamera(user),
             ),
+            const SizedBox(height: AppSpacing.md),
+            DsNotice(
+              icon: LucideIcons.info,
+              message: switch (mode) {
+                ScanMode.authenticity =>
+                  'Point the camera at the QR code on the box to check the '
+                      'product is genuine. Checking does not use up the code.',
+                ScanMode.win =>
+                  'Point the camera at the QR code on the box. A genuine code '
+                      'you claim first pays '
+                      'PKR ${MockScanRepository.prizeFor(user.role)!.formatted} '
+                      'straight into your wallet.',
+              },
+            ),
+            if (_busy) ...[
+              const SizedBox(height: AppSpacing.md),
+              const Center(child: CircularProgressIndicator()),
+            ],
             const SizedBox(height: AppSpacing.lg),
+            // No meta here: the header squeezes its title to fit one, and
+            // the notice above already explains what these are for.
             const DsSectionHeader(title: 'Sample codes'),
             DsRowGroup(
               children: [
                 for (final sample in MockScanRepository.sampleCodes)
                   DsSettingRow(
                     label: sample.code,
-                    meta: sample.meaning,
+                    meta: mode == ScanMode.authenticity
+                        ? _authenticityMeaning(sample.code)
+                        : sample.meaning,
                     onTap: () {
                       _code.text = sample.code;
                       _check(user);
@@ -113,6 +162,11 @@ class _ScanScreenState extends State<ScanScreen> {
       ),
     );
   }
+
+  /// A prize and a claim mean nothing on this tab, so the samples say what an
+  /// authenticity check will actually return.
+  String _authenticityMeaning(String code) =>
+      code.startsWith('CS-BAT') ? 'Blocked batch' : 'Genuine product';
 }
 
 class _Result extends StatelessWidget {
@@ -145,14 +199,6 @@ class _Result extends StatelessWidget {
               'We cannot match this code. Check you scanned the Crown Solar '
               'label, and contact the team if it keeps failing.',
         ),
-        ScanVerdict.notReleased => (
-          icon: LucideIcons.clock,
-          tone: DsTone.warning,
-          title: 'Not released yet',
-          message:
-              'This code exists but the batch has not left the plant. Try '
-              'again once the product is on sale.',
-        ),
         ScanVerdict.blocked => (
           icon: LucideIcons.octagonAlert,
           tone: DsTone.error,
@@ -167,10 +213,13 @@ class _Result extends StatelessWidget {
   Widget build(BuildContext context) {
     final verdict = _verdict;
     final product = outcome.product;
+    final checking = outcome.mode == ScanMode.authenticity;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Center(child: DsTag(label: outcome.mode.label, uppercase: true)),
+        const SizedBox(height: AppSpacing.md),
         Center(
           child: DsIconMedallion(
             icon: verdict.icon,
@@ -195,15 +244,54 @@ class _Result extends StatelessWidget {
             ),
           ),
         ],
+        if (outcome.claim != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          DsCard(
+            tone: DsCardTone.sunken,
+            child: Column(
+              children: [
+                const DsSectionHeader(title: 'Claimed by'),
+                DsSettingRow(label: 'Partner', value: outcome.claim!.name),
+                DsSettingRow(label: 'Role', value: outcome.claim!.role),
+                DsSettingRow(
+                  label: 'Scanned on',
+                  value: _dayOf(outcome.claim!.claimedAt),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (outcome.hasPrize) ...[
           const SizedBox(height: AppSpacing.md),
-          DsNotice(
-            icon: LucideIcons.gift,
-            tone: DsTone.solar,
-            title: 'You won ${outcome.prize}',
+          DsCard(
+            tone: DsCardTone.sunken,
+            child: Column(
+              children: [
+                const DsCaption('YOU WON'),
+                const SizedBox(height: 4),
+                Text(
+                  'PKR ${outcome.prizeCredited!.formatted}',
+                  style: context.texts.headlineSmall?.copyWith(
+                    color: context.status.success,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                const DsBody(
+                  'Paid into your wallet now. It appears in your ledger as a '
+                  'scan prize.',
+                  size: 13,
+                  align: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ] else if (outcome.isGenuine && checking) ...[
+          const SizedBox(height: AppSpacing.md),
+          const DsNotice(
+            icon: LucideIcons.info,
             message:
-                'PKR ${outcome.prizeCredited!.formatted} has been credited to '
-                'your wallet.',
+                'Nothing has been claimed. This code can still be scanned on '
+                'the Scan to Win tab.',
           ),
         ] else if (outcome.isGenuine) ...[
           const SizedBox(height: AppSpacing.md),
@@ -235,4 +323,23 @@ class UpperCaseTextFormatter extends TextInputFormatter {
     text: newValue.text.toUpperCase(),
     selection: newValue.selection,
   );
+}
+
+/// "15 Sep 2026" — enough to place a claim without a full timestamp.
+String _dayOf(DateTime when) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${when.day} ${months[when.month - 1]} ${when.year}';
 }

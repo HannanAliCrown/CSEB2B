@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/scanner/qr_scanner_screen.dart';
 import '../../../../core/ui/ds.dart';
 import '../../data/wallet_repository.dart';
 import '../wallet_view_model.dart';
@@ -47,7 +48,11 @@ class _SendCashScreenState extends State<SendCashScreen> {
     final wallet = context.watch<WalletViewModel>();
 
     return PopScope(
-      canPop: wallet.step == SendCashStep.recipient,
+      // The middle steps go back a step; the first and last leave the flow —
+      // once the cash is sent there is nothing left to step back through.
+      canPop:
+          wallet.step == SendCashStep.recipient ||
+          wallet.step == SendCashStep.sent,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) wallet.back();
       },
@@ -100,7 +105,9 @@ class _SendCashScreenState extends State<SendCashScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: AppSpacing.stepMd,
           mainAxisSpacing: AppSpacing.stepMd,
-          mainAxisExtent: 104,
+          // The design's 104 leaves no room for a two-line description once
+          // the real font renders it.
+          mainAxisExtent: 116,
           children: [
             for (final (path, icon, label, meta) in _paths)
               _PathCard(
@@ -171,16 +178,23 @@ class _SendCashScreenState extends State<SendCashScreen> {
     );
   }
 
-  void _choosePath(_Path path) {
-    if (path == _Path.scan) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Scanning a profile QR code is not wired up yet.'),
-        ),
-      );
-      return;
-    }
+  Future<void> _choosePath(_Path path) async {
     setState(() => _path = path);
+    if (path != _Path.scan) return;
+
+    // A partner's profile QR carries their mobile number; the directory turns
+    // that into the business name, exactly as a typed number would.
+    final code = await QrScannerScreen.open(
+      context,
+      title: 'Scan Profile QR',
+      instruction:
+          'Point the camera at the partner\'s Crown Solar profile QR code.',
+    );
+    if (!mounted || code == null) return;
+
+    _search.text = code.trim();
+    setState(() => _path = _Path.search);
+    await context.read<WalletViewModel>().lookupRecipient(code);
   }
 
   // --- A2 · how much -----------------------------------------------------
@@ -505,12 +519,18 @@ class _PathCard extends StatelessWidget {
               label,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
-            Text(
-              meta,
-              style: TextStyle(
-                fontSize: 11,
-                height: 15 / 11,
-                color: context.palette.textTertiary,
+            // Clipped rather than overflowing, so a larger system font never
+            // breaks the card.
+            Flexible(
+              child: Text(
+                meta,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 15 / 11,
+                  color: context.palette.textTertiary,
+                ),
               ),
             ),
           ],

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/ui/ds.dart';
 import '../../../session/data/signed_in_user.dart';
 import '../../../session/ui/session_controller.dart';
+import '../../../wallet/data/wallet_repository.dart';
 import '../../data/dashboard_repository.dart';
 import '../widgets/home_widgets.dart';
 
@@ -39,7 +40,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      // A scan prize or a transfer made on another screen changes the
+      // balance behind this one, so Home reloads rather than going stale.
+      context.read<WalletRepository>().changes.addListener(_load);
+    });
+  }
+
+  @override
+  void dispose() {
+    context.read<WalletRepository>().changes.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {

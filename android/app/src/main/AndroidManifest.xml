@@ -7,12 +7,22 @@
     <!-- Map tiles. Flutter only adds this to the debug manifest. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Reading a QR code, and the CNIC and selfie captures. Declaring this
+         makes it mandatory for the camera intent too, so every capture path
+         asks for it first. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- Sync Contacts reads the address book to find which numbers already
+         belong to Crown Solar partners. Read-only: nothing is written back,
+         and unmatched numbers are discarded rather than stored. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
     <application
-        android:label="cse_b2b"
+        android:label="Crown Solar Energy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

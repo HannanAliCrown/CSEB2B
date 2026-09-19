@@ -79,24 +79,39 @@ class DsSectionHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
-          Flexible(
-            child: Text(
-              title,
-              style: context.texts.titleLarge,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          // The title and its meta take the whole row apart from the
+          // action, rather than sharing it with a flexible gap — a Spacer
+          // beside a Flexible title halved the space the title could use and
+          // truncated headers that fit comfortably.
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    style: context.texts.titleLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (meta != null) ...[
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      meta!,
+                      style: context.texts.bodySmall?.copyWith(
+                        color: context.palette.textTertiary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (meta != null) ...[
-            const SizedBox(width: 10),
-            Text(
-              meta!,
-              style: context.texts.bodySmall?.copyWith(
-                color: context.palette.textTertiary,
-              ),
-            ),
-          ],
-          const Spacer(),
           if (actionLabel != null)
             GestureDetector(
               onTap: onAction,

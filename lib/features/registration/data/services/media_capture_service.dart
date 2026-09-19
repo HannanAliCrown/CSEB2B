@@ -1,4 +1,5 @@
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Where a picture may come from. Shop photos allow both; identity captures
 /// (CNIC front, CNIC back, liveness selfie) are camera-only, so the gallery
@@ -20,8 +21,15 @@ class DeviceMediaCaptureService implements MediaCaptureService {
 
   final ImagePicker _picker;
 
+  /// The app declares the CAMERA permission for the QR scanner, which makes
+  /// it mandatory for the camera intent as well. Asking first turns a hard
+  /// failure into a decision the partner makes.
+  Future<bool> _cameraAllowed() async =>
+      (await Permission.camera.request()).isGranted;
+
   @override
   Future<String?> pickShopImage(MediaSource source) async {
+    if (source == MediaSource.camera && !await _cameraAllowed()) return null;
     final file = await _picker.pickImage(
       source: source == MediaSource.camera
           ? ImageSource.camera
@@ -33,6 +41,7 @@ class DeviceMediaCaptureService implements MediaCaptureService {
 
   @override
   Future<String?> captureIdentityImage({bool frontCamera = false}) async {
+    if (!await _cameraAllowed()) return null;
     final file = await _picker.pickImage(
       // Always the camera: an identity document or liveness selfie is never
       // chosen from the gallery.

@@ -17,11 +17,28 @@ enum ScanVerdict {
   /// Not a Crown Solar code at all.
   notRecognised,
 
-  /// A real code the factory has not released yet.
-  notReleased,
-
   /// Withdrawn — a batch Crown Solar has blocked.
   blocked,
+}
+
+/// What the partner asked the scan to do.
+///
+/// The two are separate journeys, not two views of one result: an
+/// authenticity check never claims a code and never pays, so stock on a shelf
+/// can be checked without burning the prize printed on it.
+enum ScanMode {
+  /// Is this a genuine Crown Solar product?
+  authenticity,
+
+  /// Claim this code and take whatever it pays.
+  win,
+}
+
+extension ScanModeX on ScanMode {
+  String get label => switch (this) {
+    ScanMode.authenticity => 'Authenticity Check',
+    ScanMode.win => 'Scan to Win',
+  };
 }
 
 /// A Crown Solar product behind a code.
@@ -37,44 +54,79 @@ class ScannedProduct {
   final String madeOn;
 }
 
+/// Who claimed a code, and when.
+class ScanClaim {
+  const ScanClaim({
+    required this.name,
+    required this.role,
+    required this.claimedAt,
+  });
+
+  final String name;
+  final String role;
+  final DateTime claimedAt;
+}
+
 /// What a scan produced: whether the product is genuine, and any prize.
 class ScanOutcome {
   const ScanOutcome({
     required this.code,
+    required this.mode,
     required this.verdict,
     this.product,
-    this.prize,
     this.prizeCredited,
+    this.claim,
   });
 
   final String code;
+
+  /// What the partner asked for, which decides how the result reads.
+  final ScanMode mode;
+
   final ScanVerdict verdict;
   final ScannedProduct? product;
 
-  /// What was won, when the scan earned something.
-  final String? prize;
-
-  /// Cash credited to the wallet by this scan.
+  /// Cash credited to the wallet by this scan. Null when nothing was won.
   final Money? prizeCredited;
 
+  /// Who already claimed this code, on an [ScanVerdict.alreadyScanned].
+  final ScanClaim? claim;
+
   bool get isGenuine => verdict == ScanVerdict.genuine;
-  bool get hasPrize => prize != null;
+  bool get hasPrize => prizeCredited != null;
 }
 
 /// The scanner's data boundary. A real service would verify the code against
 /// Crown Solar's factory records; the mock below behaves the same way.
 abstract interface class ScanRepository {
-  Future<ScanOutcome> check({required String code, required SignedInUser user});
+  Future<ScanOutcome> check({
+    required String code,
+    required SignedInUser user,
+    required ScanMode mode,
+  });
 }
 
 /// Deterministic scan results, so every verdict can be demonstrated.
 ///
 /// The code decides the outcome, which keeps the prototype reproducible
-/// without a camera: see [sampleCodes].
+/// without a printed box: see [sampleCodes]. A prize really is credited to
+/// the wallet, so the balance and the ledger agree with what the screen says.
 class MockScanRepository implements ScanRepository {
-  MockScanRepository();
+  MockScanRepository({required WalletRepository wallet}) : _wallet = wallet;
+
+  final WalletRepository _wallet;
 
   static const _latency = Duration(milliseconds: 450);
+
+  /// What a winning scan pays, by role. Prototype figures — the real amounts
+  /// belong to whichever scheme Crown Solar is running.
+  ///
+  /// Null for the trade roles: they scan to check a product, never to win.
+  static Money? prizeFor(PartnerRole role) => switch (role) {
+    PartnerRole.installer => Money.rupees(500),
+    PartnerRole.retailer => Money.rupees(300),
+    PartnerRole.wholesaler || PartnerRole.distributor => null,
+  };
 
   /// Codes that demonstrate each verdict, listed on the scan screen so the
   /// journey can be walked without a printed box.
@@ -83,59 +135,100 @@ class MockScanRepository implements ScanRepository {
     (code: 'CS-PNL-2207', meaning: 'Genuine · no prize this time'),
     (code: 'CS-INV-0001', meaning: 'Already scanned'),
     (code: 'CS-BAT-7788', meaning: 'Blocked batch'),
-    (code: 'CS-NEW-9000', meaning: 'Not released yet'),
   ];
 
-  /// Codes already claimed in this session, so scanning twice behaves the way
-  /// it would against a real ledger.
-  final Set<String> _claimed = {'CS-INV-0001'};
+  /// Codes already claimed, and by whom. One is seeded so the
+  /// already-scanned state can be seen without scanning twice.
+  final Map<String, ScanClaim> _claims = {
+    'CS-INV-0001': ScanClaim(
+      name: 'Bilal Traders',
+      role: 'Retailer',
+      claimedAt: DateTime.now().subtract(const Duration(days: 4)),
+    ),
+  };
 
   @override
   Future<ScanOutcome> check({
     required String code,
     required SignedInUser user,
+    required ScanMode mode,
   }) async {
     await Future<void>.delayed(_latency);
 
     final normalised = code.trim().toUpperCase();
 
     if (!normalised.startsWith('CS-') || normalised.length < 10) {
-      return ScanOutcome(code: normalised, verdict: ScanVerdict.notRecognised);
+      return ScanOutcome(
+        code: normalised,
+        mode: mode,
+        verdict: ScanVerdict.notRecognised,
+      );
     }
     if (normalised.startsWith('CS-BAT')) {
       return ScanOutcome(
         code: normalised,
+        mode: mode,
         verdict: ScanVerdict.blocked,
         product: _productFor(normalised),
       );
     }
-    if (normalised.startsWith('CS-NEW')) {
+
+    final product = _productFor(normalised);
+
+    // An authenticity check answers one question and changes nothing: the
+    // code stays unclaimed and the wallet is untouched.
+    if (mode == ScanMode.authenticity) {
       return ScanOutcome(
         code: normalised,
-        verdict: ScanVerdict.notReleased,
-        product: _productFor(normalised),
+        mode: mode,
+        verdict: ScanVerdict.genuine,
+        product: product,
       );
     }
-    if (_claimed.contains(normalised)) {
+
+    final claim = _claims[normalised];
+    if (claim != null) {
       return ScanOutcome(
         code: normalised,
+        mode: mode,
         verdict: ScanVerdict.alreadyScanned,
-        product: _productFor(normalised),
+        product: product,
+        claim: claim,
       );
     }
 
-    _claimed.add(normalised);
+    _claims[normalised] = ScanClaim(
+      name: user.businessName,
+      role: user.role.label,
+      claimedAt: DateTime.now(),
+    );
 
-    // Only installers and retailers earn from a scan; the trade roles scan
-    // to check a product is genuine.
-    final wins = user.role.earnsPrizes && normalised.endsWith('1');
+    // The trade roles have no Scan to Win tab; this only guards against a
+    // caller asking for one anyway.
+    final prize = prizeFor(user.role);
+    final wins = prize != null && normalised.endsWith('1');
+    if (!wins) {
+      return ScanOutcome(
+        code: normalised,
+        mode: mode,
+        verdict: ScanVerdict.genuine,
+        product: product,
+      );
+    }
+
+    await _wallet.creditScanPrize(
+      user: user,
+      amount: prize,
+      productName: product.name,
+      code: normalised,
+    );
 
     return ScanOutcome(
       code: normalised,
+      mode: mode,
       verdict: ScanVerdict.genuine,
-      product: _productFor(normalised),
-      prize: wins ? 'Cash prize' : null,
-      prizeCredited: wins ? Money.rupees(500) : null,
+      product: product,
+      prizeCredited: prize,
     );
   }
 

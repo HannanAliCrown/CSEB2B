@@ -93,10 +93,6 @@ class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
                   'You will get a notification each time an approval is '
                   'recorded.',
                 ),
-                _PrototypeControls(
-                  pending: pending,
-                  onChanged: () => setState(() {}),
-                ),
               ],
       ),
     );
@@ -270,52 +266,6 @@ class _ApproverRow extends StatelessWidget {
               icon: LucideIcons.phone,
               onPressed: onCall,
             ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Prototype-only: no approver can reach this phone, so the approvals are
-/// recorded here instead. This card would not exist in the real app.
-class _PrototypeControls extends StatelessWidget {
-  const _PrototypeControls({required this.pending, required this.onChanged});
-
-  final PendingRegistration pending;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final outstanding = Approver.values
-        .where((a) => pending.approvals[a] == ApprovalState.outstanding)
-        .toList();
-    if (outstanding.isEmpty) return const SizedBox.shrink();
-
-    return DsCard(
-      tone: DsCardTone.sunken,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const DsCaption('PROTOTYPE ONLY · NOT PART OF THE APP'),
-          const SizedBox(height: AppSpacing.sm),
-          const DsBody(
-            'Approvals arrive from Crown Solar in the real app. Record one '
-            'here to see what happens next.',
-            size: 13,
-          ),
-          const SizedBox(height: AppSpacing.stepMd),
-          for (final approver in outstanding) ...[
-            DsButton(
-              label: 'Record ${approver.title} approval',
-              variant: DsButtonVariant.secondary,
-              size: DsButtonSize.sm,
-              onPressed: () {
-                pending.approvals[approver] = ApprovalState.approved;
-                onChanged();
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
           ],
         ],
       ),

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../core/mock/partner_directory.dart';
 import '../../session/data/signed_in_user.dart';
 
@@ -53,6 +55,27 @@ enum LedgerState {
   rejected,
 }
 
+/// What put a line in the ledger. The filter sheet offers these by name.
+enum LedgerType {
+  sendCash,
+  cashRequest,
+  scanPrize,
+  spinPrize,
+  returned,
+  adjustment,
+}
+
+extension LedgerTypeX on LedgerType {
+  String get label => switch (this) {
+    LedgerType.sendCash => 'Send Cash',
+    LedgerType.cashRequest => 'Cash Request',
+    LedgerType.scanPrize => 'QR prize',
+    LedgerType.spinPrize => 'Spin prize',
+    LedgerType.returned => 'Returned',
+    LedgerType.adjustment => 'CRM adjustment',
+  };
+}
+
 /// One line in the wallet ledger.
 class LedgerEntry {
   const LedgerEntry({
@@ -63,7 +86,10 @@ class LedgerEntry {
     required this.amount,
     required this.direction,
     required this.state,
+    required this.type,
   });
+
+  final LedgerType type;
 
   final String id;
   final DateTime postedAt;
@@ -119,7 +145,20 @@ class TransferResult {
 
 /// The wallet's data boundary: balance, ledger, recipients and transfers.
 abstract interface class WalletRepository {
+  /// Fires whenever money moves, so anything showing a balance can reload
+  /// rather than going stale behind another screen.
+  Listenable get changes;
+
   Future<Money> balance(SignedInUser user);
+
+  /// Credits a prize won by scanning a product, so the wallet and the ledger
+  /// agree about it immediately.
+  Future<LedgerEntry> creditScanPrize({
+    required SignedInUser user,
+    required Money amount,
+    required String productName,
+    required String code,
+  });
 
   /// The part of the balance that is not spendable yet.
   Future<Money> heldTotal(SignedInUser user);
@@ -156,6 +195,37 @@ class MockWalletRepository implements WalletRepository {
 
   final Map<String, List<LedgerEntry>> _ledgers = {};
   var _nextId = 1000;
+
+  final _changes = _Broadcast();
+
+  @override
+  Listenable get changes => _changes;
+
+  /// Anything watching a balance is told the moment one moves.
+  void _announce() => _changes.announce();
+
+  @override
+  Future<LedgerEntry> creditScanPrize({
+    required SignedInUser user,
+    required Money amount,
+    required String productName,
+    required String code,
+  }) async {
+    final entry = LedgerEntry(
+      id: 'PRZ-${_nextId++}',
+      postedAt: DateTime.now(),
+      title: 'Scan prize · $productName',
+      subtitle: code,
+      amount: amount,
+      direction: LedgerDirection.credit,
+      // A prize is Crown Solar's own money: nobody has to accept it.
+      state: LedgerState.cleared,
+      type: LedgerType.scanPrize,
+    );
+    _ledgerFor(user).add(entry);
+    _announce();
+    return entry;
+  }
 
   List<LedgerEntry> _ledgerFor(SignedInUser user) => _ledgers.putIfAbsent(
     PartnerDirectory.normalise(user.mobileNumber),
@@ -273,9 +343,11 @@ class MockWalletRepository implements WalletRepository {
       amount: amount,
       direction: LedgerDirection.debit,
       state: LedgerState.held,
+      type: LedgerType.sendCash,
     );
 
     _ledgerFor(from).add(entry);
+    _announce();
     return TransferResult.success(entry, held: true);
   }
 
@@ -293,6 +365,7 @@ class MockWalletRepository implements WalletRepository {
         amount: Money.rupees(user.role.earnsPrizes ? 18500 : 142000),
         direction: LedgerDirection.credit,
         state: LedgerState.cleared,
+        type: LedgerType.adjustment,
       ),
       LedgerEntry(
         id: 'TX-0002',
@@ -302,6 +375,7 @@ class MockWalletRepository implements WalletRepository {
         amount: Money.rupees(1200),
         direction: LedgerDirection.credit,
         state: LedgerState.cleared,
+        type: LedgerType.scanPrize,
       ),
       LedgerEntry(
         id: 'TX-0003',
@@ -311,6 +385,7 @@ class MockWalletRepository implements WalletRepository {
         amount: Money.rupees(3000),
         direction: LedgerDirection.debit,
         state: LedgerState.cleared,
+        type: LedgerType.sendCash,
       ),
       LedgerEntry(
         id: 'TX-0004',
@@ -320,6 +395,7 @@ class MockWalletRepository implements WalletRepository {
         amount: Money.rupees(1500),
         direction: LedgerDirection.debit,
         state: LedgerState.held,
+        type: LedgerType.sendCash,
       ),
       LedgerEntry(
         id: 'TX-0005',
@@ -329,7 +405,14 @@ class MockWalletRepository implements WalletRepository {
         amount: Money.rupees(800),
         direction: LedgerDirection.credit,
         state: LedgerState.cleared,
+        type: LedgerType.scanPrize,
       ),
     ];
   }
+}
+
+/// A [ChangeNotifier] its owner can fire, so the wallet can announce that a
+/// balance moved without exposing the whole notifier API.
+class _Broadcast extends ChangeNotifier {
+  void announce() => notifyListeners();
 }

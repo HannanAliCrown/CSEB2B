@@ -3,9 +3,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/ui/ds.dart';
+import '../../features/chat/data/chat_repository.dart';
+import '../../features/chat/ui/views/chat_list_tab.dart';
 import '../../features/home/ui/views/dashboard_screen.dart';
+import '../../features/profile/ui/views/profile_tab.dart';
 import '../../features/session/data/signed_in_user.dart';
 import '../../features/session/ui/session_controller.dart';
+import '../../features/space/data/space_repository.dart';
+import '../../features/space/ui/views/space_feed_tab.dart';
 
 /// The signed-in app: five destinations behind one bottom bar.
 ///
@@ -18,12 +23,22 @@ class AppShell extends StatefulWidget {
     required this.onViewLedger,
     required this.onScan,
     required this.onSignOut,
+    required this.onShowQrCode,
+    required this.onSyncContacts,
+    required this.onNewConversation,
+    required this.onOpenThread,
+    required this.onOpenPost,
   });
 
   final VoidCallback onSendCash;
   final VoidCallback onViewLedger;
   final VoidCallback onScan;
   final VoidCallback onSignOut;
+  final VoidCallback onShowQrCode;
+  final VoidCallback onSyncContacts;
+  final VoidCallback onNewConversation;
+  final ValueChanged<ChatParty> onOpenThread;
+  final ValueChanged<SpacePost> onOpenPost;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -65,7 +80,19 @@ class _AppShellState extends State<AppShell> {
           onScan: widget.onScan,
           onOpenModule: _comingSoon,
         ),
-        'profile' => _Profile(user: user, onSignOut: widget.onSignOut),
+        'space' => SpaceFeedTab(onOpenPost: widget.onOpenPost),
+        'chat' => ChatListTab(
+          onNewConversation: widget.onNewConversation,
+          onOpenThread: widget.onOpenThread,
+        ),
+        'profile' => ProfileTab(
+          onShowQrCode: widget.onShowQrCode,
+          onSyncContacts: widget.onSyncContacts,
+          onSignOut: () async {
+            await context.read<SessionController>().signOut();
+            widget.onSignOut();
+          },
+        ),
         _ => _NotBuiltYet(
           label: nav.firstWhere((item) => item.id == _tab).label,
         ),
@@ -104,49 +131,6 @@ class _NotBuiltYet extends StatelessWidget {
             icon: LucideIcons.hammer,
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Enough Profile to see who is signed in and to leave.
-class _Profile extends StatelessWidget {
-  const _Profile({required this.user, required this.onSignOut});
-
-  final SignedInUser user;
-  final VoidCallback onSignOut;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
-        children: [
-          DsPartyRow(
-            name: user.businessName,
-            meta: '${user.role.label} · ${user.market}',
-          ),
-          const SizedBox(height: AppSpacing.md),
-          DsCard(
-            child: Column(
-              children: [
-                DsSettingRow(label: 'Contact', value: user.contactName),
-                DsSettingRow(label: 'Mobile', value: user.mobileNumber),
-                DsSettingRow(label: 'Market', value: user.market),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          DsButton(
-            label: 'Sign Out',
-            variant: DsButtonVariant.secondary,
-            icon: LucideIcons.logOut,
-            onPressed: () async {
-              await context.read<SessionController>().signOut();
-              onSignOut();
-            },
-          ),
-        ],
       ),
     );
   }

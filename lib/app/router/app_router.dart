@@ -17,10 +17,19 @@ import 'package:cse_b2b/app/shell/app_shell.dart';
 import 'package:cse_b2b/core/prefs/app_preferences.dart';
 import 'package:cse_b2b/features/home/data/dashboard_repository.dart';
 import 'package:cse_b2b/features/scan/data/scan_repository.dart';
+import 'package:cse_b2b/features/chat/data/chat_repository.dart';
+import 'package:cse_b2b/features/chat/ui/views/conversation_screen.dart';
+import 'package:cse_b2b/features/chat/ui/views/new_conversation_screen.dart';
+import 'package:cse_b2b/features/profile/data/contacts_repository.dart';
+import 'package:cse_b2b/features/profile/ui/views/my_qr_code_screen.dart';
+import 'package:cse_b2b/features/profile/ui/views/sync_contacts_screen.dart';
 import 'package:cse_b2b/features/scan/ui/views/scan_screen.dart';
 import 'package:cse_b2b/features/session/data/session_repository.dart';
 import 'package:cse_b2b/features/session/ui/session_controller.dart';
+import 'package:cse_b2b/features/space/data/space_repository.dart';
+import 'package:cse_b2b/features/space/ui/views/post_detail_screen.dart';
 import 'package:cse_b2b/features/wallet/data/wallet_repository.dart';
+import 'package:cse_b2b/features/wallet/ui/ledger_view_model.dart';
 import 'package:cse_b2b/features/wallet/ui/wallet_view_model.dart';
 import 'package:cse_b2b/features/wallet/ui/views/ledger_screen.dart';
 import 'package:cse_b2b/features/wallet/ui/views/send_cash_screen.dart';
@@ -64,6 +73,17 @@ abstract final class AppRoutes {
 
   /// Where a submitted registration waits for its three approvals.
   static const approval = '/approval';
+
+  /// Starting a conversation, and one conversation itself.
+  static const newConversation = '/chat/new';
+  static const conversation = '/chat/thread';
+
+  /// One Space post, its comments and the replies under them.
+  static const post = '/space/post';
+
+  /// The partner's own QR code, and the contact sync behind it.
+  static const myQrCode = '/profile/qr';
+  static const syncContacts = '/profile/contacts';
 
   /// The earlier spec-driven placeholder home, kept while its logout flow
   /// is finished separately.
@@ -120,7 +140,10 @@ GoRouter createAppRouter({
   );
   final wallet = MockWalletRepository();
   final dashboard = MockDashboardRepository(wallet: wallet);
-  final scanner = MockScanRepository();
+  final scanner = MockScanRepository(wallet: wallet);
+  final contacts = DeviceContactsRepository(preferences: prefs);
+  final chat = MockChatRepository();
+  final space = MockSpaceRepository();
 
   /// Everything behind sign-in shares one session and one wallet, so a
   /// transfer made on one screen is the balance another screen shows.
@@ -130,6 +153,9 @@ GoRouter createAppRouter({
       Provider<WalletRepository>.value(value: wallet),
       Provider<DashboardRepository>.value(value: dashboard),
       Provider<ScanRepository>.value(value: scanner),
+      Provider<ContactsRepository>.value(value: contacts),
+      Provider<ChatRepository>.value(value: chat),
+      Provider<SpaceRepository>.value(value: space),
     ],
     child: child,
   );
@@ -279,6 +305,12 @@ GoRouter createAppRouter({
             onViewLedger: () => context.push(AppRoutes.ledger),
             onScan: () => context.push(AppRoutes.scan),
             onSignOut: () => context.go(AppRoutes.login),
+            onShowQrCode: () => context.push(AppRoutes.myQrCode),
+            onSyncContacts: () => context.push(AppRoutes.syncContacts),
+            onNewConversation: () => context.push(AppRoutes.newConversation),
+            onOpenThread: (party) =>
+                context.push(AppRoutes.conversation, extra: party),
+            onOpenPost: (post) => context.push(AppRoutes.post, extra: post),
           ),
         ),
       ),
@@ -293,14 +325,45 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.ledger,
         builder: (context, state) => signedIn(
-          Builder(
-            builder: (context) => withWallet(context, const LedgerScreen()),
+          ChangeNotifierProvider(
+            create: (_) =>
+                LedgerViewModel(repository: wallet, user: session.user!),
+            child: const LedgerScreen(),
           ),
         ),
       ),
       GoRoute(
         path: AppRoutes.scan,
         builder: (context, state) => signedIn(const ScanScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.newConversation,
+        builder: (context, state) => signedIn(
+          NewConversationScreen(
+            // Replace the picker with the conversation, so Back from a chat
+            // returns to the list rather than the picker.
+            onOpenThread: (party) =>
+                context.pushReplacement(AppRoutes.conversation, extra: party),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.conversation,
+        builder: (context, state) =>
+            signedIn(ConversationScreen(party: state.extra! as ChatParty)),
+      ),
+      GoRoute(
+        path: AppRoutes.post,
+        builder: (context, state) =>
+            signedIn(PostDetailScreen(post: state.extra! as SpacePost)),
+      ),
+      GoRoute(
+        path: AppRoutes.myQrCode,
+        builder: (context, state) => signedIn(const MyQrCodeScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.syncContacts,
+        builder: (context, state) => signedIn(const SyncContactsScreen()),
       ),
       GoRoute(
         path: AppRoutes.approval,
