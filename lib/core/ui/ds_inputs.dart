@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_palette.dart';
@@ -28,6 +29,7 @@ class DsInput extends StatelessWidget {
     this.obscure = false,
     this.maxLines = 1,
     this.trailingCaption,
+    this.inputFormatters,
   });
 
   final String? label;
@@ -50,6 +52,9 @@ class DsInput extends StatelessWidget {
   final bool obscure;
   final int maxLines;
   final String? trailingCaption;
+
+  /// Constrains what can be typed, e.g. digits only up to a fixed length.
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +115,7 @@ class DsInput extends StatelessWidget {
                     enabled: enabled && !readOnly,
                     obscureText: obscure,
                     keyboardType: keyboardType,
+                    inputFormatters: inputFormatters,
                     maxLines: maxLines,
                     minLines: maxLines > 1 ? maxLines : 1,
                     onChanged: onChanged,

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../data/models/registration_draft.dart';
 import '../registration_scope.dart';
 import '../view_models/registration_flow_view_model.dart';
-import 'approval_status_screens.dart';
 import 'registration_cnic_screens.dart';
 import 'registration_review_screens.dart';
 import 'registration_source_screens.dart';
@@ -17,9 +16,16 @@ import 'registration_wizard_screens.dart';
 /// wizard's own back behaviour, so moving backwards never loses what was
 /// entered.
 class RegistrationFlowScreen extends StatefulWidget {
-  const RegistrationFlowScreen({super.key, required this.onGoToLogin});
+  const RegistrationFlowScreen({
+    super.key,
+    required this.onGoToLogin,
+    required this.onSeeApprovalStatus,
+  });
 
   final VoidCallback onGoToLogin;
+
+  /// Opens the real approval screen for the number that was just submitted.
+  final ValueChanged<String> onSeeApprovalStatus;
 
   @override
   State<RegistrationFlowScreen> createState() => _RegistrationFlowScreenState();
@@ -57,18 +63,15 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
 
       case RegistrationStage.submitted:
         return RegistrationSubmittedScreen(
-          onSeeStatus: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const ApprovalPendingScreen(),
-            ),
-          ),
+          onSeeStatus: () =>
+              widget.onSeeApprovalStatus(flow.draft.fullMobileNumber),
         );
 
       case RegistrationStage.shopPin:
         return const RegistrationPinDropScreen();
 
-      case RegistrationStage.cnicCaptureReview:
-        return const CnicReviewScreen();
+      case RegistrationStage.cnicNumber:
+        return const CnicNumberScreen();
 
       case RegistrationStage.wizard:
         return _wizardScreen(flow);
@@ -103,11 +106,10 @@ class _RegistrationFlowScreenState extends State<RegistrationFlowScreen> {
         return const RegistrationSourceScreen();
 
       case RegistrationStep.cnic:
-        // The captures are taken first, then the number read off them is
-        // confirmed.
-        return flow.draft.cnicFrontPath == null
-            ? const CnicCaptureScreen()
-            : const CnicNumberScreen();
+        // The three captures are listed first, and each one opens the camera
+        // only when it is chosen. Confirming the number is a separate stage
+        // reached from that list.
+        return const CnicReviewScreen();
 
       case RegistrationStep.review:
         return const RegistrationReviewScreen();

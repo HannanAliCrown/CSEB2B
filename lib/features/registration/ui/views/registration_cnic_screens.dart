@@ -128,7 +128,7 @@ class CnicCaptureScreen extends StatelessWidget {
                       // A cancelled camera leaves nothing captured, so the
                       // review screen would have nothing to review.
                       if (flow != null && flow.draft.cnicFrontPath != null) {
-                        flow.openCnicReview();
+                        flow.openCnicNumber();
                       }
                     },
                     child: Container(
@@ -249,7 +249,9 @@ class CnicReviewScreen extends StatelessWidget {
       footer: DsFooterBar(
         child: DsButton(
           label: 'Continue',
-          onPressed: flow?.closeSubStage ?? () {},
+          // The number cannot be confirmed before all three captures exist.
+          disabled: flow != null && !flow.draft.hasAllIdentityCaptures,
+          onPressed: flow?.openCnicNumber ?? () {},
         ),
       ),
       children: flow == null
@@ -281,10 +283,15 @@ class CnicReviewScreen extends StatelessWidget {
               ),
             ]
           : [
+              const DsBody(
+                'Three photos are needed. Choose one to open the camera — '
+                'identity photos are taken with the camera only.',
+                size: 14,
+              ),
               DsUploadRow(
                 label: 'CNIC front',
                 meta: draft!.cnicFrontPath == null
-                    ? 'Not captured'
+                    ? 'Not captured · tap to open the camera'
                     : 'Captured',
                 state: draft.cnicFrontPath == null
                     ? DsUploadState.empty
@@ -294,7 +301,9 @@ class CnicReviewScreen extends StatelessWidget {
               ),
               DsUploadRow(
                 label: 'CNIC back',
-                meta: draft.cnicBackPath == null ? 'Not captured' : 'Captured',
+                meta: draft.cnicBackPath == null
+                    ? 'Not captured · tap to open the camera'
+                    : 'Captured',
                 state: draft.cnicBackPath == null
                     ? DsUploadState.empty
                     : DsUploadState.uploaded,
@@ -303,7 +312,9 @@ class CnicReviewScreen extends StatelessWidget {
               ),
               DsUploadRow(
                 label: 'Liveness selfie',
-                meta: draft.selfiePath == null ? 'Not captured' : 'Captured',
+                meta: draft.selfiePath == null
+                    ? 'Not captured · tap to open the camera'
+                    : 'Captured',
                 state: draft.selfiePath == null
                     ? DsUploadState.empty
                     : DsUploadState.uploaded,
@@ -364,7 +375,9 @@ class _CnicNumberScreenState extends State<CnicNumberScreen> {
               label: 'Retake CNIC Photo',
               variant: DsButtonVariant.quiet,
               icon: LucideIcons.camera,
-              onPressed: flow?.captureCnicFront ?? () {},
+              // Back to the capture list, so any of the three can be redone
+              // rather than only the front.
+              onPressed: flow?.closeSubStage ?? () {},
             ),
           ],
         ),

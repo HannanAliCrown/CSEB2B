@@ -349,7 +349,10 @@ void main() {
       await model.submitCnic();
 
       expect(model.step, RegistrationStep.cnic);
-      expect(model.errorFor('cnicNumber'), contains('Adnan Solar Works'));
+      expect(
+        model.errorFor('cnicNumber'),
+        'A partner is already registered with this CNIC.',
+      );
 
       model.updateDraft((d) => d.copyWith(cnicNumber: '35202-5550001-9'));
       await model.submitCnic();
@@ -366,6 +369,121 @@ void main() {
 
       expect(model.errorFor('cnicNumber'), 'Enter the 13-digit CNIC number.');
       expect(model.step, RegistrationStep.cnic);
+    });
+
+    test('the same video link cannot be used twice', () async {
+      final model = _build().model;
+      await _fillTo(model, RegistrationStep.media);
+
+      model.setVideoLink(0, 'https://youtu.be/one');
+      model.setVideoLink(1, 'https://youtu.be/ONE/');
+      model.next();
+
+      expect(model.step, RegistrationStep.media);
+      expect(model.errorFor('videoLink1'), 'This link is already used above.');
+      expect(model.errorFor('videoLink0'), isNull);
+
+      model.setVideoLink(1, 'https://youtu.be/two');
+      model.next();
+      expect(model.step, RegistrationStep.otp);
+    });
+
+    test(
+      'a number is accepted as 11 digits or without the leading 0',
+      () async {
+        for (final typed in ['03001122334', '3001122334', '+92 300 1122334']) {
+          final model = _build().model;
+          await model.start();
+          model.setMobileNumber(typed);
+          await model.submitMobileNumber();
+
+          expect(model.step, RegistrationStep.role, reason: 'typed as $typed');
+          expect(model.draft.fullMobileNumber, '+92 3001122334');
+        }
+      },
+    );
+
+    test('a number of the wrong length is refused', () async {
+      for (final typed in ['300112233', '030011223344', '0300']) {
+        final model = _build().model;
+        await model.start();
+        model.setMobileNumber(typed);
+        await model.submitMobileNumber();
+
+        expect(model.step, RegistrationStep.number, reason: 'typed as $typed');
+        expect(model.error, contains('10 digits after +92'));
+      }
+    });
+
+    test('the leading 0 form still finds an existing account', () async {
+      final model = _build().model;
+      await model.start();
+
+      model.setMobileNumber('03217745002');
+      await model.submitMobileNumber();
+
+      expect(model.existingAccount?.exists, isTrue);
+      expect(model.existingAccount?.role, 'Retailer');
+    });
+
+    test('the CNIC step lists the captures before opening a camera', () async {
+      final harness = _build();
+      await _fillTo(harness.model, RegistrationStep.cnic);
+
+      expect(harness.model.step, RegistrationStep.cnic);
+      expect(
+        harness.model.stage,
+        RegistrationStage.wizard,
+        reason: 'the capture list is the step, not the camera',
+      );
+      expect(
+        harness.media.calls,
+        isEmpty,
+        reason: 'arriving at step 7 never opens a camera by itself',
+      );
+      expect(harness.model.draft.hasAllIdentityCaptures, isFalse);
+
+      await harness.model.captureCnicFront();
+      await harness.model.captureCnicBack();
+      await harness.model.captureSelfie();
+
+      expect(harness.model.draft.hasAllIdentityCaptures, isTrue);
+      harness.model.openCnicNumber();
+      expect(harness.model.stage, RegistrationStage.cnicNumber);
+    });
+
+    test('editing one answer from review returns to review', () async {
+      final model = _build().model;
+      await _fillTo(model, RegistrationStep.review);
+
+      model.editStep(RegistrationStep.details);
+
+      expect(model.step, RegistrationStep.details);
+      expect(model.editingFromReview, isTrue);
+
+      model.updateDraft((d) => d.copyWith(businessName: 'Renamed Solar'));
+      model.next();
+
+      expect(
+        model.step,
+        RegistrationStep.review,
+        reason: 'the rest of the wizard is not walked again',
+      );
+      expect(model.draft.businessName, 'Renamed Solar');
+      expect(model.editingFromReview, isFalse);
+    });
+
+    test('an edit that fails validation stays on the step', () async {
+      final model = _build().model;
+      await _fillTo(model, RegistrationStep.review);
+
+      model.editStep(RegistrationStep.details);
+      model.updateDraft((d) => d.copyWith(businessName: ''));
+      model.next();
+
+      expect(model.step, RegistrationStep.details);
+      expect(model.errorFor('businessName'), isNotNull);
+      expect(model.editingFromReview, isTrue);
     });
 
     test('moving back keeps everything that was entered', () async {

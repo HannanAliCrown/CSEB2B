@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/ui/ds.dart';
@@ -10,13 +11,30 @@ import '../widgets/crown_wordmark.dart';
 /// Mobile number only, "Keep me signed in", and the device-policy notice
 /// stated up front so the OTP screen is never a surprise.
 class SignInScreen extends StatefulWidget {
-  const SignInScreen({super.key, this.notice, this.onSignIn, this.onRegister});
+  const SignInScreen({
+    super.key,
+    this.notice,
+    this.onSignIn,
+    this.onRegister,
+    this.onSubmit,
+    this.busy = false,
+    this.error,
+  });
 
   /// The session-expired variant (B3) reuses this screen with a notice.
   final Widget? notice;
 
   /// Signing in on the bound device goes straight to the dashboard — no OTP.
   final VoidCallback? onSignIn;
+
+  /// Called with the typed number and the "Keep me signed in" choice. When
+  /// this is given the screen is live; without it the design's static
+  /// sample number stands, for the preview.
+  final void Function(String mobileNumber, {required bool keepSignedIn})?
+  onSubmit;
+
+  final bool busy;
+  final String? error;
 
   /// "Register" is the only path from here into the registration wizard.
   final VoidCallback? onRegister;
@@ -27,6 +45,13 @@ class SignInScreen extends StatefulWidget {
 
 class _SignInScreenState extends State<SignInScreen> {
   bool _keepSignedIn = true;
+  final _number = TextEditingController();
+
+  @override
+  void dispose() {
+    _number.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,11 +83,27 @@ class _SignInScreenState extends State<SignInScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const DsInput(
-              label: 'Mobile number',
-              value: '+92 300 4821190',
-              keyboardType: TextInputType.phone,
-            ),
+            // The number is always typed. Outside the wizard the design's
+            // sample number stands, for the preview only.
+            if (widget.onSubmit == null)
+              const DsInput(
+                label: 'Mobile number',
+                value: '+92 300 4821190',
+                keyboardType: TextInputType.phone,
+              )
+            else
+              DsInput(
+                label: 'Mobile number',
+                placeholder: '300 4821190',
+                prefix: Text('+92', style: context.texts.bodyLarge),
+                controller: _number,
+                keyboardType: TextInputType.phone,
+                error: widget.error,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+              ),
             const SizedBox(height: 14),
             DsCheckbox(
               checked: _keepSignedIn,
@@ -83,7 +124,13 @@ class _SignInScreenState extends State<SignInScreen> {
           children: [
             DsButton(
               label: 'Sign In',
-              onPressed: widget.onSignIn ?? () => openDashboard(context),
+              loading: widget.busy,
+              onPressed: widget.onSubmit != null
+                  ? () => widget.onSubmit!(
+                      _number.text,
+                      keepSignedIn: _keepSignedIn,
+                    )
+                  : widget.onSignIn ?? () => openDashboard(context),
             ),
             const SizedBox(height: AppSpacing.stepMd),
             GestureDetector(

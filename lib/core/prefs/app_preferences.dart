@@ -28,6 +28,12 @@ abstract interface class AppPreferences {
   Future<({double latitude, double longitude})?> currentLocation();
   Future<void> setCurrentLocation(double latitude, double longitude);
 
+  /// Generic storage for records other features keep, such as the signed-in
+  /// session. Values are opaque here — the owning feature decides the shape.
+  Future<String?> readString(String key);
+  Future<void> writeString(String key, String value);
+  Future<void> removeKey(String key);
+
   /// Development support: restores the deterministic starting state.
   Future<void> clear();
 }
@@ -95,6 +101,16 @@ class SharedAppPreferences implements AppPreferences {
   }
 
   @override
+  Future<String?> readString(String key) => _prefs.getString(key);
+
+  @override
+  Future<void> writeString(String key, String value) =>
+      _prefs.setString(key, value);
+
+  @override
+  Future<void> removeKey(String key) => _prefs.remove(key);
+
+  @override
   Future<void> clear() async {
     await _prefs.remove(_firstLaunch);
     await _prefs.remove(_language);
@@ -157,6 +173,16 @@ class InMemoryAppPreferences implements AppPreferences {
     _values['latitude'] = latitude;
     _values['longitude'] = longitude;
   }
+
+  @override
+  Future<String?> readString(String key) async => _values[key] as String?;
+
+  @override
+  Future<void> writeString(String key, String value) async =>
+      _values[key] = value;
+
+  @override
+  Future<void> removeKey(String key) async => _values.remove(key);
 
   @override
   Future<void> clear() async => _values.clear();

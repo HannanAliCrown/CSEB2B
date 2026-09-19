@@ -6,6 +6,7 @@ import '../../../design_preview/preview_journey.dart';
 import '../../data/models/registration_draft.dart';
 import '../registration_scope.dart';
 import '../widgets/registration_scaffold.dart';
+import 'registration_wizard_screens.dart' show anyMobileNumberFormatters;
 
 /// Board 01 · F1 — Step 6 · Buying source.
 ///
@@ -21,6 +22,10 @@ class RegistrationSourceScreen extends StatefulWidget {
 
 class _RegistrationSourceScreenState extends State<RegistrationSourceScreen> {
   final _controllers = <int, TextEditingController>{};
+
+  /// Why a row's number was rejected, when the reason is more specific than
+  /// "not found" — for example an installer, who buys rather than sells.
+  final _reasons = <int, String?>{};
 
   /// Rows the partner has asked for. One source is required, so the step
   /// opens with a single row; "Add Another Source" adds the next one.
@@ -103,9 +108,19 @@ class _RegistrationSourceScreenState extends State<RegistrationSourceScreen> {
                         'found automatically'
                   : null,
               notFound: i < sources.length && !sources[i].isFound,
+              notFoundReason: _reasons[i],
               onLookup: (number) async {
                 if (number.trim().isEmpty) return;
                 final entry = await flow.lookupBuyingSource(number);
+                final lookup = flow.lastSourceLookup;
+                setState(() {
+                  _reasons[i] =
+                      lookup != null && lookup.found && !lookup.eligible
+                      ? '${lookup.name} is a ${lookup.role} account. A buying '
+                            'source has to be a Retailer, Wholesaler or '
+                            'Distributor.'
+                      : null;
+                });
                 flow.replaceBuyingSource(i, entry);
               },
             ),
@@ -168,6 +183,7 @@ class _SourceCard extends StatelessWidget {
     this.controller,
     this.onLookup,
     this.notFound = false,
+    this.notFoundReason,
   });
 
   final int index;
@@ -179,6 +195,10 @@ class _SourceCard extends StatelessWidget {
   final TextEditingController? controller;
   final ValueChanged<String>? onLookup;
   final bool notFound;
+
+  /// Why this number is not usable, when the reason is more specific than
+  /// simply not being found.
+  final String? notFoundReason;
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +243,10 @@ class _SourceCard extends StatelessWidget {
             value: controller == null ? number : null,
             controller: controller,
             keyboardType: TextInputType.phone,
+            inputFormatters: controller == null
+                ? null
+                : anyMobileNumberFormatters,
+            placeholder: controller == null ? null : '0300 7781204',
             onChanged: onLookup == null ? null : (_) {},
             suffix: onLookup == null
                 ? null
@@ -241,9 +265,10 @@ class _SourceCard extends StatelessWidget {
               icon: LucideIcons.circleAlert,
               tone: DsTone.warning,
               message:
+                  notFoundReason ??
                   'No Crown Solar account found for this number. Check the '
-                  'digits, or call the team if you are not sure who your '
-                  'buying source is.',
+                      'digits, or call the team if you are not sure who your '
+                      'buying source is.',
               dense: true,
             ),
           ],

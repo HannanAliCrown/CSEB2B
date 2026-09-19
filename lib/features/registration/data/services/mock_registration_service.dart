@@ -1,4 +1,5 @@
 import '../models/registration_draft.dart';
+import '../../../../core/mock/pending_registrations.dart';
 import 'mock_registration_data_store.dart';
 import 'registration_service.dart';
 
@@ -57,11 +58,21 @@ class MockRegistrationService implements RegistrationService {
     return OtpVerifyOutcome.verified;
   }
 
+  /// Roles a partner can buy Crown Solar product from. An installer buys the
+  /// same way this applicant does, so an installer is never a buying source.
+  static const buyingSourceRoles = {'Retailer', 'Wholesaler', 'Distributor'};
+
   @override
   Future<BuyingSourceLookup> lookupBuyingSource(String mobileNumber) async {
     await Future<void>.delayed(_latency);
     final account = _store.accountFor(mobileNumber);
     if (account == null) return const BuyingSourceLookup.notFound();
+    if (!buyingSourceRoles.contains(account.role)) {
+      return BuyingSourceLookup.ineligible(
+        name: account.displayName,
+        role: account.role,
+      );
+    }
     return BuyingSourceLookup.found(
       name: account.displayName,
       role: account.role,
@@ -79,10 +90,26 @@ class MockRegistrationService implements RegistrationService {
   Future<RegistrationSubmission> submit(RegistrationDraft draft) async {
     await Future<void>.delayed(_latency);
     final submittedAt = DateTime.now();
+    final reference =
+        'CSE-PR-${submittedAt.year}-'
+        '${submittedAt.millisecondsSinceEpoch.remainder(1000000)}';
+
+    // The applicant can now sign in, but only to watch the approvals land.
+    PendingRegistrations.add(
+      PendingRegistration(
+        reference: reference,
+        mobileNumber: draft.fullMobileNumber,
+        businessName: draft.businessName,
+        contactName: draft.fullName,
+        role: draft.role?.label ?? 'Installer',
+        market: draft.market ?? '',
+        verifyingSourceName: draft.verifyingSource?.matchedName,
+        submittedAt: submittedAt,
+      ),
+    );
+
     _submission = RegistrationSubmission(
-      reference:
-          'CSE-PR-${submittedAt.year}-'
-          '${submittedAt.millisecondsSinceEpoch.remainder(1000000)}',
+      reference: reference,
       submittedAt: submittedAt,
       verifyingSourceName: draft.verifyingSource?.matchedName,
       // Submitting starts the approval chain; it never grants it.

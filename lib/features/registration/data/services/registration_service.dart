@@ -31,6 +31,7 @@ enum OtpVerifyOutcome { verified, invalidCode, noChallenge }
 class BuyingSourceLookup {
   const BuyingSourceLookup.notFound()
     : found = false,
+      eligible = false,
       name = null,
       role = null,
       market = null;
@@ -38,12 +39,27 @@ class BuyingSourceLookup {
     required this.name,
     required this.role,
     required this.market,
-  }) : found = true;
+  }) : found = true,
+       eligible = true;
+
+  /// The number belongs to a real account, but not one this partner can buy
+  /// from — an installer buys the same way they do.
+  const BuyingSourceLookup.ineligible({required this.name, required this.role})
+    : found = true,
+      eligible = false,
+      market = null;
 
   final bool found;
+
+  /// Whether the account found may act as a buying source.
+  final bool eligible;
+
   final String? name;
   final String? role;
   final String? market;
+
+  /// Usable as a buying source: found, and of a role that sells.
+  bool get usable => found && eligible;
 }
 
 enum RegistrationApprovalState { outstanding, approved, rejected }

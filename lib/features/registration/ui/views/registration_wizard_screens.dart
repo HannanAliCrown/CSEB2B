@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -14,6 +15,30 @@ import '../widgets/shop_location_map.dart';
 import '../view_models/registration_flow_view_model.dart';
 import '../widgets/registration_scaffold.dart';
 
+/// Where the map opens when no shop pin has been placed: the phone's own
+/// position, captured at first launch. It is a viewport only — the shop's pin
+/// is never inferred from it.
+LatLng? _phoneCentre(RegistrationFlowViewModel? flow) {
+  final here = flow?.phoneLocation;
+  return here == null ? null : LatLng(here.latitude, here.longitude);
+}
+
+/// The mobile fields take the ten national digits only: the +92 shown beside
+/// them already stands for the leading 0, and letters or spaces never belong
+/// in a subscriber number.
+final mobileNumberFormatters = <TextInputFormatter>[
+  FilteringTextInputFormatter.digitsOnly,
+  LengthLimitingTextInputFormatter(10),
+];
+
+/// A number typed without a country code beside it, so it may arrive in any
+/// of the forms a partner writes: 0300 1122334, 300 1122334, or +92 300
+/// 1122334. All three resolve to the same subscriber.
+final anyMobileNumberFormatters = <TextInputFormatter>[
+  FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+  LengthLimitingTextInputFormatter(13),
+];
+
 Widget _continueFooter(
   BuildContext context, {
   String label = 'Continue',
@@ -21,10 +46,12 @@ Widget _continueFooter(
   bool busy = false,
 }) {
   final flow = RegistrationScope.maybeOf(context);
+  // Correcting one answer from review returns there, so the button says so.
+  final editing = flow?.editingFromReview ?? false;
   return DsFooterBar(
     child: DsButton(
-      label: label,
-      iconAfter: LucideIcons.arrowRight,
+      label: editing ? 'Save and Return' : label,
+      iconAfter: editing ? LucideIcons.check : LucideIcons.arrowRight,
       loading: busy,
       onPressed:
           onPressed ??
@@ -88,10 +115,14 @@ class _RegistrationNumberScreenState extends State<RegistrationNumberScreen> {
             Expanded(
               child: DsInput(
                 label: 'Mobile number',
+                // The +92 beside this field already stands for the leading 0,
+                // so only the ten national digits are typed here.
+                placeholder: '300 4821190',
                 controller: _number,
                 onChanged: flow?.setMobileNumber,
                 error: flow?.error,
                 keyboardType: TextInputType.phone,
+                inputFormatters: mobileNumberFormatters,
               ),
             ),
           ],
@@ -162,6 +193,7 @@ class _RegistrationNumberTakenScreenState
                 controller: _number,
                 onChanged: flow?.setMobileNumber,
                 keyboardType: TextInputType.phone,
+                inputFormatters: mobileNumberFormatters,
               ),
             ),
           ],
@@ -338,6 +370,8 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
           onChanged: (v) =>
               flow?.updateDraft((d) => d.copyWith(alternateNumber: v)),
           keyboardType: TextInputType.phone,
+          inputFormatters: mobileNumberFormatters,
+          error: flow?.errorFor('alternateNumber'),
         ),
         DsInput(
           label: 'Business name',
@@ -396,6 +430,9 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
                       pin: draft.hasShopPin
                           ? LatLng(draft.shopLatitude!, draft.shopLongitude!)
                           : null,
+                      // With no pin yet, the map opens where the phone is, so
+                      // the partner starts near their own shop.
+                      centre: _phoneCentre(flow),
                       interactive: false,
                     ),
               actionLabel: 'Drop pin on map',
@@ -500,6 +537,7 @@ class _RegistrationPinDropScreenState extends State<RegistrationPinDropScreen> {
                 ? const DsMapPlaceholder(height: null)
                 : ShopLocationMap(
                     pin: _pin,
+                    centre: _phoneCentre(flow),
                     onPinMoved: (point) => setState(() => _pin = point),
                   ),
           ),
@@ -833,8 +871,8 @@ class _RegistrationOtpScreenState extends State<RegistrationOtpScreen> {
           icon: LucideIcons.save,
           tone: DsTone.info,
           message:
-              'Your details and photos from the last two steps are already '
-              'saved. Verifying just confirms this number is really yours.',
+              'Your details from the last two steps are already saved. '
+              'Verifying just confirms this number is really yours.',
         ),
       ],
     );

@@ -186,19 +186,24 @@ class _RegistrationReviewScreenState extends State<RegistrationReviewScreen> {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
-                      GestureDetector(
-                        onTap: flow == null
-                            ? null
-                            : () => flow.editStep(rows[i].$3),
-                        child: Text(
-                          'Edit',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: context.colors.primary,
+                      // The role decides what the rest of the form asked for,
+                      // so it cannot be swapped at the end — CRM changes it.
+                      if (rows[i].$3 == RegistrationStep.role)
+                        const SizedBox.shrink()
+                      else
+                        GestureDetector(
+                          onTap: flow == null
+                              ? null
+                              : () => flow.editStep(rows[i].$3),
+                          child: Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.primary,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),

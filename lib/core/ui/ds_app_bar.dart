@@ -113,7 +113,15 @@ class DsFooterBar extends StatelessWidget {
         color: context.colors.surface,
         border: Border(top: BorderSide(color: context.colors.outline)),
       ),
-      child: SafeArea(top: false, child: child),
+      // As a Scaffold's bottomNavigationBar this is offered the whole screen
+      // height, and a Column child would take all of it — pushing its buttons
+      // to the top of the screen and leaving the step's content behind an
+      // empty bar. Laying the child out in a min-sized Column gives it an
+      // unbounded main axis, so the bar always hugs its content.
+      child: SafeArea(
+        top: false,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [child]),
+      ),
     );
   }
 }

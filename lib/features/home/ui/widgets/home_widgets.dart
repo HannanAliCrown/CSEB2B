@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/ui/ds.dart';
@@ -109,6 +112,9 @@ class WalletBalanceCard extends StatelessWidget {
     this.heldNote,
     this.label = 'Wallet balance',
     this.showActions = true,
+    this.onToggleHidden,
+    this.onSendCash,
+    this.onViewLedger,
   });
 
   final String amount;
@@ -116,6 +122,9 @@ class WalletBalanceCard extends StatelessWidget {
   final String? heldNote;
   final String label;
   final bool showActions;
+  final VoidCallback? onToggleHidden;
+  final VoidCallback? onSendCash;
+  final VoidCallback? onViewLedger;
 
   @override
   Widget build(BuildContext context) {
@@ -140,18 +149,21 @@ class WalletBalanceCard extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.75),
                 ),
               ),
-              Container(
-                width: 32,
-                height: 32,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  hidden ? LucideIcons.eyeOff : LucideIcons.eye,
-                  size: 18,
-                  color: Colors.white,
+              GestureDetector(
+                onTap: onToggleHidden,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hidden ? LucideIcons.eyeOff : LucideIcons.eye,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -200,10 +212,17 @@ class WalletBalanceCard extends StatelessWidget {
           if (showActions) ...[
             const SizedBox(height: 14),
             Row(
-              children: const [
-                Expanded(child: _WalletAction(label: 'Send Cash')),
-                SizedBox(width: 10),
-                Expanded(child: _WalletAction(label: 'View Ledger')),
+              children: [
+                Expanded(
+                  child: _WalletAction(label: 'Send Cash', onTap: onSendCash),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WalletAction(
+                    label: 'View Ledger',
+                    onTap: onViewLedger,
+                  ),
+                ),
               ],
             ),
           ],
@@ -214,25 +233,29 @@ class WalletBalanceCard extends StatelessWidget {
 }
 
 class _WalletAction extends StatelessWidget {
-  const _WalletAction({required this.label});
+  const _WalletAction({required this.label, this.onTap});
 
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
         ),
       ),
     );
@@ -240,17 +263,141 @@ class _WalletAction extends StatelessWidget {
 }
 
 /// The promotional slider card and its dot indicator.
-class HomePromoSlider extends StatelessWidget {
+/// One slide's copy, so this widget stays independent of the data layer.
+typedef PromoCopy = ({String eyebrow, String headline});
+
+class HomePromoSlider extends StatefulWidget {
   const HomePromoSlider({
     super.key,
     required this.eyebrow,
     required this.headline,
     this.slideCount = 3,
+    this.slides,
+    this.onSlideTap,
   });
 
   final String eyebrow;
   final String headline;
   final int slideCount;
+
+  /// Every slide to cycle through. With none, the single [eyebrow] and
+  /// [headline] are shown as a static card — which is how the design preview
+  /// renders it.
+  final List<PromoCopy>? slides;
+
+  final ValueChanged<int>? onSlideTap;
+
+  @override
+  State<HomePromoSlider> createState() => _HomePromoSliderState();
+}
+
+class _HomePromoSliderState extends State<HomePromoSlider> {
+  /// How long each slide rests before the next one moves in.
+  static const _dwell = Duration(seconds: 5);
+
+  final _pages = PageController();
+  Timer? _advance;
+  int _current = 0;
+
+  List<PromoCopy> get _slides =>
+      widget.slides ?? [(eyebrow: widget.eyebrow, headline: widget.headline)];
+
+  @override
+  void initState() {
+    super.initState();
+    _restartAutoAdvance();
+  }
+
+  @override
+  void didUpdateWidget(HomePromoSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.slides?.length != widget.slides?.length) {
+      _restartAutoAdvance();
+    }
+  }
+
+  /// Slides advance on their own only when there is more than one, so the
+  /// design preview never animates.
+  void _restartAutoAdvance() {
+    _advance?.cancel();
+    if (_slides.length < 2) return;
+    _advance = Timer.periodic(_dwell, (_) {
+      if (!mounted || !_pages.hasClients) return;
+      _pages.animateToPage(
+        (_current + 1) % _slides.length,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _advance?.cancel();
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slides = _slides;
+
+    return Column(
+      children: [
+        if (slides.length > 1)
+          SizedBox(
+            height: 132,
+            child: PageView.builder(
+              controller: _pages,
+              itemCount: slides.length,
+              onPageChanged: (page) => setState(() => _current = page),
+              itemBuilder: (context, i) => GestureDetector(
+                onTap: widget.onSlideTap == null
+                    ? null
+                    : () => widget.onSlideTap!(i),
+                child: _PromoCard(
+                  eyebrow: slides[i].eyebrow,
+                  headline: slides[i].headline,
+                ),
+              ),
+            ),
+          )
+        else
+          _PromoCard(
+            eyebrow: slides.first.eyebrow,
+            headline: slides.first.headline,
+          ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            slides.length > 1 ? slides.length : widget.slideCount,
+            (i) {
+              final active = i == _current;
+              return Container(
+                width: active ? 18 : 6,
+                height: 6,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: active
+                      ? context.colors.primary
+                      : const Color(0xFFC9D2E0),
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PromoCard extends StatelessWidget {
+  const _PromoCard({required this.eyebrow, required this.headline});
+
+  final String eyebrow;
+  final String headline;
 
   @override
   Widget build(BuildContext context) {
@@ -312,23 +459,6 @@ class HomePromoSlider extends StatelessWidget {
               ),
             ],
           ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(slideCount, (i) {
-            return Container(
-              width: i == 0 ? 18 : 6,
-              height: 6,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: i == 0
-                    ? context.colors.primary
-                    : const Color(0xFFC9D2E0),
-                borderRadius: BorderRadius.circular(AppRadii.pill),
-              ),
-            );
-          }),
         ),
       ],
     );
@@ -399,31 +529,94 @@ class ScanQrCta extends StatelessWidget {
 }
 
 /// The accent-tinted announcement ticker.
-class HomeTicker extends StatelessWidget {
-  const HomeTicker({super.key, required this.message});
+class HomeTicker extends StatefulWidget {
+  const HomeTicker({super.key, required this.message, this.messages});
 
   final String message;
 
+  /// Every announcement to scroll through, joined into one running line.
+  /// With none, [message] is shown still — which is how the design preview
+  /// renders it.
+  final List<String>? messages;
+
+  @override
+  State<HomeTicker> createState() => _HomeTickerState();
+}
+
+class _HomeTickerState extends State<HomeTicker>
+    with SingleTickerProviderStateMixin {
+  /// Reading speed, in logical pixels per second.
+  static const _pixelsPerSecond = 40.0;
+
+  final _scroll = ScrollController();
+  Ticker? _ticker;
+  Duration _last = Duration.zero;
+
+  String get _line => widget.messages == null || widget.messages!.isEmpty
+      ? widget.message
+      : widget.messages!.join('   ·   ');
+
+  @override
+  void initState() {
+    super.initState();
+    // A still line needs no animation, so the design preview never ticks.
+    if (widget.messages == null || widget.messages!.length < 2) return;
+    _ticker = createTicker(_onTick)..start();
+  }
+
+  void _onTick(Duration elapsed) {
+    if (!_scroll.hasClients) {
+      _last = elapsed;
+      return;
+    }
+    final seconds = (elapsed - _last).inMicroseconds / 1e6;
+    _last = elapsed;
+
+    final extent = _scroll.position.maxScrollExtent;
+    if (extent <= 0) return;
+
+    // One continuous loop: the line is drawn twice, so running past the first
+    // copy and wrapping never shows a gap.
+    final next = _scroll.offset + _pixelsPerSecond * seconds;
+    _scroll.jumpTo(next >= extent ? 0 : next);
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final running = _ticker != null;
+    final style = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      color: context.colors.primary,
+    );
+
     return Container(
       width: double.infinity,
       color: context.palette.accentSoft,
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: SingleChildScrollView(
+        controller: running ? _scroll : null,
         scrollDirection: Axis.horizontal,
+        physics: running ? const NeverScrollableScrollPhysics() : null,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.screenPadding,
         ),
-        child: Text(
-          message,
-          maxLines: 1,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: context.colors.primary,
-          ),
-        ),
+        child: running
+            ? Row(
+                children: [
+                  Text(_line, maxLines: 1, style: style),
+                  const SizedBox(width: AppSpacing.xl),
+                  Text(_line, maxLines: 1, style: style),
+                ],
+              )
+            : Text(_line, maxLines: 1, style: style),
       ),
     );
   }
@@ -436,12 +629,17 @@ class HomeTile {
     required this.icon,
     this.badge,
     this.dimmed = false,
+    this.onTap,
   });
 
   final String label;
   final IconData icon;
   final int? badge;
   final bool dimmed;
+
+  /// What opening this module does. A tile with nothing behind it yet is
+  /// left without an action rather than pretending to work.
+  final VoidCallback? onTap;
 }
 
 class HomeTileGrid extends StatelessWidget {
@@ -465,68 +663,71 @@ class HomeTileGrid extends StatelessWidget {
         final tile = tiles[i];
         return Opacity(
           opacity: tile.dimmed ? 0.45 : 1,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-            decoration: BoxDecoration(
-              color: context.colors.surface,
-              borderRadius: AppRadii.mdRadius,
-              border: Border.all(color: context.colors.outline),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    DsIconMedallion(
-                      icon: tile.icon,
-                      size: 40,
-                      iconSize: 20,
-                      rounded: true,
-                    ),
-                    if (tile.badge != null)
-                      Positioned(
-                        top: -4,
-                        right: -6,
-                        child: Container(
-                          width: 18,
-                          height: 18,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: context.colors.error,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: context.colors.surface,
-                              width: 2,
+          child: GestureDetector(
+            onTap: tile.dimmed ? null : tile.onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+              decoration: BoxDecoration(
+                color: context.colors.surface,
+                borderRadius: AppRadii.mdRadius,
+                border: Border.all(color: context.colors.outline),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      DsIconMedallion(
+                        icon: tile.icon,
+                        size: 40,
+                        iconSize: 20,
+                        rounded: true,
+                      ),
+                      if (tile.badge != null)
+                        Positioned(
+                          top: -4,
+                          right: -6,
+                          child: Container(
+                            width: 18,
+                            height: 18,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: context.colors.error,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: context.colors.surface,
+                                width: 2,
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            '${tile.badge}',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                            child: Text(
+                              '${tile.badge}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Flexible(
+                    child: Text(
+                      tile.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 15 / 12,
+                        fontWeight: FontWeight.w600,
                       ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Flexible(
-                  child: Text(
-                    tile.label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      height: 15 / 12,
-                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

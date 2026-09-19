@@ -108,9 +108,27 @@ class RegistrationDraft {
   final int stepIndex;
   final DateTime? updatedAt;
 
-  String get fullMobileNumber => '$countryCode $mobileNumber'.trim();
+  /// The ten national digits, however the partner typed them. A Pakistani
+  /// mobile is eleven digits written locally (0300 1122334), and the +92 code
+  /// stands in for that leading zero — so 0300…, 300… and +92 300… all mean
+  /// the same subscriber.
+  static String nationalDigits(String raw) {
+    var digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('0092')) digits = digits.substring(4);
+    if (digits.startsWith('92')) digits = digits.substring(2);
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    return digits;
+  }
+
+  String get nationalMobileNumber => nationalDigits(mobileNumber);
+
+  String get fullMobileNumber => '$countryCode $nationalMobileNumber'.trim();
 
   bool get hasShopPin => shopLatitude != null && shopLongitude != null;
+
+  /// CNIC front, CNIC back and the liveness selfie are all in hand.
+  bool get hasAllIdentityCaptures =>
+      cnicFrontPath != null && cnicBackPath != null && selfiePath != null;
 
   /// The source that receives the approval request; the rest are recorded
   /// with the application but are not asked to verify it.
