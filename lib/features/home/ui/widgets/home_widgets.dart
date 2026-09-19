@@ -401,66 +401,68 @@ class _PromoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          constraints: const BoxConstraints(minHeight: 132),
-          padding: const EdgeInsets.all(AppSpacing.stepLg),
-          clipBehavior: Clip.hardEdge,
-          decoration: BoxDecoration(
-            borderRadius: AppRadii.lgRadius,
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF1B1E8C), Color(0xFF04037E)],
+    // Full width, so the slider lines up with the wallet card above it. The
+    // card used to shrink-wrap its headline and sit centred, which left it
+    // noticeably narrower than everything else on the screen.
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 132),
+      padding: const EdgeInsets.all(AppSpacing.stepLg),
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        borderRadius: AppRadii.lgRadius,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1B1E8C), Color(0xFF04037E)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -24,
+            bottom: -24,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: context.palette.crownGold.withValues(alpha: 0.22),
+                shape: BoxShape.circle,
+              ),
             ),
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                right: -24,
-                bottom: -24,
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: context.palette.crownGold.withValues(alpha: 0.22),
-                    shape: BoxShape.circle,
+          Padding(
+            // Room for the gold disc in the corner, so the headline does not
+            // run across it now that the card is full width.
+            padding: const EdgeInsets.only(right: 72),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  eyebrow.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 0.06 * 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.8),
                   ),
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    eyebrow.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 0.06 * 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.8),
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  headline,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    height: 24 / 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
                   ),
-                  const SizedBox(height: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 220),
-                    child: Text(
-                      headline,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        height: 24 / 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

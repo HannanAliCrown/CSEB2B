@@ -137,15 +137,42 @@ class MockScanRepository implements ScanRepository {
     (code: 'CS-BAT-7788', meaning: 'Blocked batch'),
   ];
 
-  /// Codes already claimed, and by whom. One is seeded so the
-  /// already-scanned state can be seen without scanning twice.
-  final Map<String, ScanClaim> _claims = {
-    'CS-INV-0001': ScanClaim(
-      name: 'Bilal Traders',
-      role: 'Retailer',
-      claimedAt: DateTime.now().subtract(const Duration(days: 4)),
-    ),
+  /// Claims, held per code and then per role.
+  ///
+  /// One box is sold on and installed, so the same code is worth one claim to
+  /// an installer and one to a retailer. A second installer on a code an
+  /// installer has already taken is turned away; a retailer on that same code
+  /// is not.
+  final Map<String, Map<PartnerRole, ScanClaim>> _claims = _seedClaims();
+
+  /// The deterministic starting state: one code already claimed in both
+  /// roles, so the already-scanned result can be seen without scanning twice.
+  static Map<String, Map<PartnerRole, ScanClaim>> _seedClaims() => {
+    'CS-INV-0001': {
+      PartnerRole.retailer: ScanClaim(
+        name: 'Bilal Traders',
+        role: 'Retailer',
+        claimedAt: DateTime.now().subtract(const Duration(days: 4)),
+      ),
+      PartnerRole.installer: ScanClaim(
+        name: 'Shahdara Solar Services',
+        role: 'Installer',
+        claimedAt: DateTime.now().subtract(const Duration(days: 2)),
+      ),
+    },
   };
+
+  /// Development support: forgets every claim taken in this session and
+  /// restores the seeded ones, so the winning journey can be walked again
+  /// without restarting the app.
+  ///
+  /// Prizes already paid are left alone — the wallet and the ledger keep what
+  /// they were credited, because that money really was won.
+  void reset() {
+    _claims
+      ..clear()
+      ..addAll(_seedClaims());
+  }
 
   @override
   Future<ScanOutcome> check({
@@ -186,7 +213,9 @@ class MockScanRepository implements ScanRepository {
       );
     }
 
-    final claim = _claims[normalised];
+    // Only this role's claim can stand in the way: what an installer took
+    // says nothing about what a retailer may take.
+    final claim = _claims[normalised]?[user.role];
     if (claim != null) {
       return ScanOutcome(
         code: normalised,
@@ -197,17 +226,27 @@ class MockScanRepository implements ScanRepository {
       );
     }
 
-    _claims[normalised] = ScanClaim(
+    // The trade roles have no Scan to Win tab; this only guards against a
+    // caller asking for one anyway. They take no claim either, so they can
+    // never use up a code an installer or a retailer is owed.
+    final prize = prizeFor(user.role);
+    if (prize == null) {
+      return ScanOutcome(
+        code: normalised,
+        mode: mode,
+        verdict: ScanVerdict.genuine,
+        product: product,
+      );
+    }
+
+    // The entry is spent whether or not this code was a winning one.
+    (_claims[normalised] ??= {})[user.role] = ScanClaim(
       name: user.businessName,
       role: user.role.label,
       claimedAt: DateTime.now(),
     );
 
-    // The trade roles have no Scan to Win tab; this only guards against a
-    // caller asking for one anyway.
-    final prize = prizeFor(user.role);
-    final wins = prize != null && normalised.endsWith('1');
-    if (!wins) {
+    if (!normalised.endsWith('1')) {
       return ScanOutcome(
         code: normalised,
         mode: mode,

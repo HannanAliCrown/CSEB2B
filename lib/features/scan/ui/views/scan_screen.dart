@@ -134,7 +134,13 @@ class _ScanScreenState extends State<ScanScreen> {
             const SizedBox(height: AppSpacing.lg),
             // No meta here: the header squeezes its title to fit one, and
             // the notice above already explains what these are for.
-            const DsSectionHeader(title: 'Sample codes'),
+            DsSectionHeader(
+              title: 'Sample codes',
+              // Only Scan to Win spends a code, so only it has anything to
+              // put back.
+              actionLabel: mode == ScanMode.win ? 'Reset scans' : null,
+              onAction: mode == ScanMode.win ? _resetScans : null,
+            ),
             DsRowGroup(
               children: [
                 for (final sample in MockScanRepository.sampleCodes)
@@ -150,6 +156,14 @@ class _ScanScreenState extends State<ScanScreen> {
                   ),
               ],
             ),
+            if (mode == ScanMode.win) ...[
+              const SizedBox(height: AppSpacing.sm),
+              const DsCaption(
+                'Prototype only: Reset scans forgets the codes claimed in this '
+                'session, so they can be won again without restarting the '
+                'app. Prizes already paid stay in your wallet.',
+              ),
+            ],
           ] else
             _Result(
               outcome: outcome,
@@ -157,6 +171,19 @@ class _ScanScreenState extends State<ScanScreen> {
                 _outcome = null;
                 _code.clear();
               }),
+              // Offered here because this is where a demonstration hits the
+              // wall: the code has been claimed and there is no way back.
+              onResetScans:
+                  outcome.mode == ScanMode.win &&
+                      outcome.verdict == ScanVerdict.alreadyScanned
+                  ? () {
+                      _resetScans();
+                      setState(() {
+                        _outcome = null;
+                        _code.clear();
+                      });
+                    }
+                  : null,
             ),
         ],
       ),
@@ -167,13 +194,32 @@ class _ScanScreenState extends State<ScanScreen> {
   /// authenticity check will actually return.
   String _authenticityMeaning(String code) =>
       code.startsWith('CS-BAT') ? 'Blocked batch' : 'Genuine product';
+
+  /// Puts every code claimed in this session back, so a demonstration can run
+  /// the winning journey more than once.
+  void _resetScans() {
+    final scanner = context.read<ScanRepository>();
+    if (scanner is! MockScanRepository) return;
+
+    scanner.reset();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sample codes can be won again.')),
+    );
+  }
 }
 
 class _Result extends StatelessWidget {
-  const _Result({required this.outcome, required this.onScanAgain});
+  const _Result({
+    required this.outcome,
+    required this.onScanAgain,
+    this.onResetScans,
+  });
 
   final ScanOutcome outcome;
   final VoidCallback onScanAgain;
+
+  /// Prototype support, offered only on an already-claimed code.
+  final VoidCallback? onResetScans;
 
   ({IconData icon, DsTone tone, String title, String message}) get _verdict =>
       switch (outcome.verdict) {
@@ -308,6 +354,20 @@ class _Result extends StatelessWidget {
           icon: LucideIcons.scanLine,
           onPressed: onScanAgain,
         ),
+        if (onResetScans != null) ...[
+          const SizedBox(height: 10),
+          DsButton(
+            label: 'Reset scans',
+            variant: DsButtonVariant.quiet,
+            onPressed: onResetScans,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          const DsCaption(
+            'Prototype only: puts the codes claimed in this session back, so '
+            'they can be won again without restarting the app.',
+            align: TextAlign.center,
+          ),
+        ],
       ],
     );
   }
