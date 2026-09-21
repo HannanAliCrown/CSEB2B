@@ -19,56 +19,44 @@ class PostgresComplaintsDataStore implements ComplaintsDataStore {
     c.response_target_minutes, c.resolution_target_working_days,
     c.raised_at, c.first_response_at, c.resolved_at,
     t.label AS type_label,
-    COALESCE(t.short_label, t.label) AS category_label,
-    s.label AS subtype_label
+    COALESCE(t.short_label, t.label) AS category_label
   ''';
 
   static const _complaintJoins = '''
     FROM complaints c
-    JOIN complaint_subtypes s ON s.id = c.subtype_id
-    JOIN complaint_types    t ON t.id = s.type_id
-    JOIN accounts           a ON a.id = c.account_id
+    JOIN complaint_types t ON t.id = c.type_id
+    JOIN accounts        a ON a.id = c.account_id
   ''';
 
   @override
   Future<List<ComplaintTypeRow>> catalogue() async {
     final result = await _client.pool.execute('''
-      SELECT t.code, t.label, t.short_label, t.position AS type_position,
-             s.id AS subtype_id, s.label AS subtype_label,
-             s.position AS subtype_position,
+      SELECT t.id, t.code, t.label, t.short_label,
              g.priority, g.response_minutes, g.resolution_working_days
         FROM complaint_types t
-        JOIN complaint_subtypes s
-          ON s.type_id = t.id AND s.active
-        LEFT JOIN complaint_targets g
-          ON g.subtype_id = s.id
+        LEFT JOIN complaint_targets g ON g.type_id = t.id
        WHERE t.active
-       ORDER BY t.position, t.label, s.position, s.label
+       ORDER BY t.position, t.label
     ''');
 
-    // One row per (sub-type, priority), folded back into the nesting the
-    // wizard reads: type → sub-type → target per priority.
-    final types = <String, ({String label, String? shortLabel})>{};
-    final subtypesByType = <String, List<String>>{};
-    final subtypeLabels = <String, String>{};
+    // One row per (category, priority), folded back into the shape the
+    // wizard reads: a category with a target for each priority.
+    final types = <String, ({String id, String label, String? shortLabel})>{};
     final targets = <String, Map<String, ComplaintTargetRow>>{};
 
     for (final record in result) {
       final row = record.toColumnMap();
       final code = row['code'] as String;
-      final subtypeId = '${row['subtype_id']}';
 
       types[code] ??= (
+        id: '${row['id']}',
         label: row['label'] as String,
         shortLabel: row['short_label'] as String?,
       );
-      final ids = subtypesByType.putIfAbsent(code, () => []);
-      if (!ids.contains(subtypeId)) ids.add(subtypeId);
-      subtypeLabels[subtypeId] = row['subtype_label'] as String;
 
       final priority = row['priority'] as String?;
       if (priority != null) {
-        targets.putIfAbsent(subtypeId, () => {})[priority] = ComplaintTargetRow(
+        targets.putIfAbsent(code, () => {})[priority] = ComplaintTargetRow(
           responseMinutes: row['response_minutes'] as int,
           resolutionWorkingDays: row['resolution_working_days'] as int,
         );
@@ -78,17 +66,11 @@ class PostgresComplaintsDataStore implements ComplaintsDataStore {
     return [
       for (final entry in types.entries)
         ComplaintTypeRow(
+          id: entry.value.id,
           code: entry.key,
           label: entry.value.label,
           shortLabel: entry.value.shortLabel,
-          subtypes: [
-            for (final id in subtypesByType[entry.key] ?? const <String>[])
-              ComplaintSubtypeRow(
-                id: id,
-                label: subtypeLabels[id]!,
-                targets: targets[id] ?? const {},
-              ),
-          ],
+          targets: targets[entry.key] ?? const {},
         ),
     ];
   }
@@ -176,7 +158,7 @@ class PostgresComplaintsDataStore implements ComplaintsDataStore {
   @override
   Future<(ComplaintRow?, ComplaintRefusal?)> raiseComplaint({
     required String mobileNumber,
-    required String subtypeId,
+    required String typeId,
     required String priority,
     required String title,
     required String detail,
@@ -185,36 +167,36 @@ class PostgresComplaintsDataStore implements ComplaintsDataStore {
       return (null, ComplaintRefusal.incomplete);
     }
     if (!_priorities.contains(priority)) {
-      return (null, ComplaintRefusal.unknownSubtype);
+      return (null, ComplaintRefusal.unknownType);
     }
 
     final accountId = await _accountId(mobileNumber);
     if (accountId == null) return (null, ComplaintRefusal.unknownAccount);
 
-    // The targets are copied in here, from the sub-type's band for this
-    // priority. A sub-type with no band for it cannot be raised at it.
+    // The targets are copied in here, from the category's band for this
+    // priority. A category with no band for it cannot be raised at it.
     final inserted = await _client.pool.execute(
       Sql.named('''
         INSERT INTO complaints (
-          account_id, subtype_id, priority, title, detail,
+          account_id, type_id, priority, title, detail,
           response_target_minutes, resolution_target_working_days
         )
-        SELECT @accountId::uuid, g.subtype_id, g.priority, @title, @detail,
+        SELECT @accountId::uuid, g.type_id, g.priority, @title, @detail,
                g.response_minutes, g.resolution_working_days
           FROM complaint_targets g
-          JOIN complaint_subtypes s ON s.id = g.subtype_id AND s.active
-         WHERE g.subtype_id = @subtypeId::uuid AND g.priority = @priority
+          JOIN complaint_types t ON t.id = g.type_id AND t.active
+         WHERE g.type_id = @typeId::uuid AND g.priority = @priority
         RETURNING id, reference
       '''),
       parameters: {
         'accountId': accountId,
-        'subtypeId': subtypeId,
+        'typeId': typeId,
         'priority': priority,
         'title': title.trim(),
         'detail': detail.trim(),
       },
     );
-    if (inserted.isEmpty) return (null, ComplaintRefusal.unknownSubtype);
+    if (inserted.isEmpty) return (null, ComplaintRefusal.unknownType);
 
     final row = inserted.first.toColumnMap();
     final complaintId = '${row['id']}';
@@ -329,7 +311,6 @@ class PostgresComplaintsDataStore implements ComplaintsDataStore {
       reference: row['reference'] as String,
       typeLabel: row['type_label'] as String,
       categoryLabel: row['category_label'] as String,
-      subtypeLabel: row['subtype_label'] as String,
       priority: row['priority'] as String,
       title: row['title'] as String,
       detail: row['detail'] as String,

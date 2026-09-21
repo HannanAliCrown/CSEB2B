@@ -30,6 +30,7 @@ endpoints, different base URL.
 | `migrations/007_points_and_targets.sql` | The points ledger, transfer rules, schemes, targets and extras. |
 | `migrations/008_profile_requests_and_cash_requests.sql` | Expected-purchase bands, and the two rules a buying source's verdict must satisfy. |
 | `migrations/009_inaam_baazar.sql` | The spin wheel and its spins, item schemes with their one claim, and the monthly reward programme. |
+| `migrations/010_complaints_without_subtypes.sql` | Drops complaint sub-types; targets and tickets key on the category instead. |
 | `seed/001_reference_and_partners.sql` | Markets and the six demo partners, matching what the mocks used. |
 | `seed/002_dashboard.sql` | The wallet movements, slides and ticker lines Home has been showing. |
 | `seed/003_space_and_chat.sql` | Opening Space posts and the two department conversations. |
@@ -72,6 +73,25 @@ flutter run --dart-define=DATA_SOURCE=server
 as the Android emulator sees it. A real device on the same network needs the
 machine's LAN address instead.
 
+## Signing in as a demo partner
+
+Any of these numbers signs in without an SMS code, because the account is
+already bound to this device. What each one is worth looking at differs, so
+one partner cannot exercise the whole app.
+
+| Number | Who | Role | What it is for |
+| --- | --- | --- | --- |
+| `3004821190` | Adnan Solar Works | Installer | The fullest account. Inaam (spins, schemes, reward programme), scanning, complaints, the wallet and its ledger. |
+| `3335560071` | Shahdara Solar Services | Installer | A second installer with nothing on it — the empty states, and the other side of a cash transfer. |
+| `3007781204` | Al-Noor Electric Store | Retailer | Cash Requests and New Profile waiting on them, points on a signed scheme. |
+| `3217745002` | Bilal Traders | Retailer | A small points balance and a transfer they sent. |
+| `3014429911` | Hamza Solar House | Wholesaler | Points with three extra targets set from the Teams app. |
+| `3028890143` | Ravi Distribution Co. | Distributor | The largest points balance, on the distributor scheme. |
+
+Installers see Inaam in the bottom bar; retailers, wholesalers and
+distributors see Points instead, and only they get the New Profile and Cash
+Request tiles on Home.
+
 ## What is moved so far
 
 | Feature | Reads from |
@@ -112,6 +132,26 @@ VALUES ('https://…/eid-2026.png', 'EID SCHEME', 'Double prizes on every invert
 INSERT INTO ticker_messages (message, text_colour, background_colour, audience, ends_at)
 VALUES ('Eid scheme live until 30 September', '#FFFFFF', '#04037E', 'all',
         timestamptz '2026-10-01');
+```
+
+## What a complaint is, and is not
+
+A ticket has a category and the partner's own words. There is no second,
+narrower dropdown: `complaint_subtypes` was dropped in migration 010 because
+a list of labels can only ever come close to the problem, while a sentence
+names it. `complaints.title` is what the partner wrote on step 1 and
+`complaints.detail` is what they wrote on step 2 — both free text, neither
+chosen from anything.
+
+`complaint_targets` is therefore keyed `(type_id, priority)`. Changing a band
+changes what is promised from then on; a ticket already raised keeps the
+`response_target_minutes` and `resolution_target_working_days` copied onto it.
+
+```sql
+-- Answer Wallet and cash complaints faster from now on.
+UPDATE complaint_targets SET response_minutes = 120
+ WHERE priority = 'high'
+   AND type_id = (SELECT id FROM complaint_types WHERE code = 'wallet_and_cash');
 ```
 
 ## Moving a complaint along

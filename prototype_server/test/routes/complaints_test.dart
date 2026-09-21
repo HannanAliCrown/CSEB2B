@@ -9,7 +9,7 @@ import '../support/request_helpers.dart';
 void main() {
   late FakeComplaintsDataStore complaints;
   late FakeAuthDataStore auth;
-  late ComplaintSubtypeRow prizeSubtype;
+  late ComplaintTypeRow prizeType;
 
   const adnan = '3004821190';
   const someoneElse = '3009990000';
@@ -19,11 +19,10 @@ void main() {
     auth = FakeAuthDataStore();
     complaints.addAccount(adnan);
     complaints.addAccount(someoneElse);
-    prizeSubtype = complaints.addType(
+    prizeType = complaints.addType(
       code: 'qr_and_prizes',
       label: 'QR and prizes',
       shortLabel: 'QR prize dispute',
-      subtype: 'Prize not credited after scan',
     );
   });
 
@@ -31,20 +30,20 @@ void main() {
 
   Future<Map<String, dynamic>> raise({
     String mobileNumber = adnan,
-    String? subtypeId,
+    String? typeId,
     String priority = 'high',
     String title = 'Prize not credited for inverter scan',
     String detail = 'The app showed the prize screen but nothing arrived.',
   }) => postJson(router(), '/complaints', {
     'mobileNumber': mobileNumber,
-    'subtypeId': subtypeId ?? prizeSubtype.id,
+    'typeId': typeId ?? prizeType.id,
     'priority': priority,
     'title': title,
     'detail': detail,
   });
 
   group('the catalogue', () {
-    test('nests sub-types and their targets under each category', () async {
+    test('carries each category and its targets per priority', () async {
       final body =
           (await getJson(router(), '/complaints/catalogue'))['body'] as Map;
       final type = (body['types'] as List).single as Map;
@@ -52,8 +51,7 @@ void main() {
       expect(type['label'], 'QR and prizes');
       expect(type['shortLabel'], 'QR prize dispute');
 
-      final subtype = (type['subtypes'] as List).single as Map;
-      final high = (subtype['targets'] as Map)['high'] as Map;
+      final high = (type['targets'] as Map)['high'] as Map;
       expect(high['responseMinutes'], 240);
       expect(high['resolutionWorkingDays'], 2);
     });
@@ -127,10 +125,10 @@ void main() {
       expect((await raise(detail: ''))['statusCode'], 400);
     });
 
-    test('refuses a priority the sub-type has no target for', () async {
+    test('refuses a priority the category has no target for', () async {
       final result = await raise(priority: 'urgent');
       expect(result['statusCode'], 400);
-      expect((result['body'] as Map)['error'], 'unknown_subtype');
+      expect((result['body'] as Map)['error'], 'unknown_type');
     });
 
     test('refuses an unknown number', () async {

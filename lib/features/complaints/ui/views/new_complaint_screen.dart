@@ -24,7 +24,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
 
   List<ComplaintCategory>? _catalogue;
   ComplaintCategory? _category;
-  ComplaintSubtype? _subtype;
   ComplaintPriority _priority = ComplaintPriority.high;
 
   int _step = 1;
@@ -50,18 +49,17 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     setState(() {
       _catalogue = loaded;
       // The first category is chosen for them, as the design shows one
-      // already selected — but never a sub-type, because "which part" is a
-      // question only the partner can answer.
+      // already selected.
       _category = loaded.isEmpty ? null : loaded.first;
     });
   }
 
-  ComplaintTarget? get _target => _subtype?.targetFor(_priority);
+  ComplaintTarget? get _target => _category?.targetFor(_priority);
 
   /// What each step needs before Continue does anything.
   bool get _stepComplete => switch (_step) {
-    1 => _subtype != null && _target != null,
-    2 => _title.text.trim().isNotEmpty && _detail.text.trim().isNotEmpty,
+    1 => _category != null && _target != null && _title.text.trim().isNotEmpty,
+    2 => _detail.text.trim().isNotEmpty,
     _ => true,
   };
 
@@ -126,20 +124,17 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
               label: category.label,
               icon: _iconFor(category.code),
               selected: _category?.code == category.code,
-              // Changing the category drops the sub-type: keeping one from
-              // the old category would carry the wrong targets with it.
-              onTap: () => setState(() {
-                _category = category;
-                _subtype = null;
-              }),
+              onTap: () => setState(() => _category = category),
             ),
         ],
       ),
-      DsSelect(
-        label: 'Which part?',
-        value: _subtype?.label,
-        placeholder: 'Choose the closest one',
-        onTap: _category == null ? null : _pickSubtype,
+      // In place of a second dropdown. A list of labels can only ever come
+      // close to the problem; the partner's own sentence names it.
+      DsInput(
+        label: 'What is the complaint?',
+        controller: _title,
+        placeholder: 'Write it in your own words',
+        onChanged: (_) => setState(() {}),
       ),
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,13 +160,13 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
         ],
       ),
       // Only once there is something to promise. Stating a target before the
-      // sub-type is chosen would be inventing one.
+      // category is chosen would be inventing one.
       if (_target != null)
         DsNotice(
           icon: LucideIcons.timer,
           tone: DsTone.info,
           message:
-              'For this sub-type at ${_priority.label} priority, Crown Solar '
+              'For this category at ${_priority.label} priority, Crown Solar '
               'aims to respond within '
               '${formatDurationWords(Duration(minutes: _target!.responseMinutes))} '
               'and resolve within '
@@ -179,32 +174,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
         ),
     ],
   );
-
-  Future<void> _pickSubtype() async {
-    final category = _category;
-    if (category == null) return;
-
-    final chosen = await showModalBottomSheet<ComplaintSubtype>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DsSheet(
-        title: category.label,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final subtype in category.subtypes)
-              DsRadio(
-                selected: _subtype?.id == subtype.id,
-                label: subtype.label,
-                onTap: () => Navigator.of(context).pop(subtype),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (chosen != null) setState(() => _subtype = chosen);
-  }
 
   // --- Step 2 · what happened ----------------------------------------------
 
@@ -226,17 +195,11 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     ),
     sections: [
       DsInput(
-        label: 'Title',
-        controller: _title,
-        placeholder: 'One line: what went wrong',
-        onChanged: (_) => setState(() {}),
-      ),
-      DsInput(
         label: 'Detail',
         controller: _detail,
         placeholder:
             'What happened, when, and anything Crown Solar needs to look up',
-        maxLines: 5,
+        maxLines: 6,
         onChanged: (_) => setState(() {}),
       ),
       const DsCaption(
@@ -267,12 +230,11 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     sections: [
       // Still editable, as the design draws them: the last chance to fix a
       // word should not mean going back two screens.
-      DsInput(label: 'Title', controller: _title),
-      DsInput(label: 'Detail', controller: _detail, maxLines: 5),
+      DsInput(label: 'What is the complaint?', controller: _title),
+      DsInput(label: 'Detail', controller: _detail, maxLines: 6),
       DsRowGroup(
         children: [
           DsSettingRow(label: 'Type', value: _category?.label ?? ''),
-          DsSettingRow(label: 'Sub-type', value: _subtype?.label ?? ''),
           DsSettingRow(
             label: 'Priority',
             trailing: DsTag(
@@ -301,8 +263,8 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
 
   Future<void> _submit() async {
     final user = context.read<SessionController>().user;
-    final subtype = _subtype;
-    if (user == null || subtype == null) return;
+    final category = _category;
+    if (user == null || category == null) return;
 
     setState(() {
       _submitting = true;
@@ -311,7 +273,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
 
     final raised = await context.read<ComplaintsService>().raise(
       mobileNumber: user.mobileNumber,
-      subtypeId: subtype.id,
+      typeId: category.id,
       priority: _priority,
       title: _title.text,
       detail: _detail.text,

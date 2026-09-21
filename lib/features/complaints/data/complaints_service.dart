@@ -44,39 +44,20 @@ class ComplaintTarget {
   );
 }
 
-/// "Which part?", and what is promised for it at each priority.
-class ComplaintSubtype {
-  const ComplaintSubtype({
+/// One of the chips on step 1 of the wizard, and what is promised for it at
+/// each priority.
+///
+/// There is no narrower choice under it. The partner writes the complaint
+/// themselves; the category is what routes the ticket.
+class ComplaintCategory {
+  const ComplaintCategory({
     required this.id,
+    required this.code,
     required this.label,
     required this.targets,
   });
 
   final String id;
-  final String label;
-  final Map<ComplaintPriority, ComplaintTarget> targets;
-
-  ComplaintTarget? targetFor(ComplaintPriority priority) => targets[priority];
-
-  static ComplaintSubtype fromJson(Map<String, dynamic> json) =>
-      ComplaintSubtype(
-        id: json['id'] as String,
-        label: json['label'] as String,
-        targets: {
-          for (final entry in (json['targets'] as Map? ?? const {}).entries)
-            ComplaintPriorityX.fromCode('${entry.key}'):
-                ComplaintTarget.fromJson(entry.value as Map<String, dynamic>),
-        },
-      );
-}
-
-/// One of the chips on step 1 of the wizard.
-class ComplaintCategory {
-  const ComplaintCategory({
-    required this.code,
-    required this.label,
-    required this.subtypes,
-  });
 
   /// Stable across renames. The screen maps this to the design's icon —
   /// the one thing about a category the database does not hold, because an
@@ -84,16 +65,20 @@ class ComplaintCategory {
   final String code;
 
   final String label;
-  final List<ComplaintSubtype> subtypes;
+  final Map<ComplaintPriority, ComplaintTarget> targets;
+
+  ComplaintTarget? targetFor(ComplaintPriority priority) => targets[priority];
 
   static ComplaintCategory fromJson(Map<String, dynamic> json) =>
       ComplaintCategory(
+        id: json['id'] as String,
         code: json['code'] as String,
         label: json['label'] as String,
-        subtypes: [
-          for (final entry in json['subtypes'] as List? ?? const [])
-            ComplaintSubtype.fromJson(entry as Map<String, dynamic>),
-        ],
+        targets: {
+          for (final entry in (json['targets'] as Map? ?? const {}).entries)
+            ComplaintPriorityX.fromCode('${entry.key}'):
+                ComplaintTarget.fromJson(entry.value as Map<String, dynamic>),
+        },
       );
 }
 
@@ -153,7 +138,6 @@ class Complaint {
     required this.reference,
     required this.typeLabel,
     required this.categoryLabel,
-    required this.subtypeLabel,
     required this.priority,
     required this.title,
     required this.detail,
@@ -176,7 +160,6 @@ class Complaint {
   /// The short one, as the list and the detail header say it.
   final String categoryLabel;
 
-  final String subtypeLabel;
   final ComplaintPriority priority;
   final String title;
   final String detail;
@@ -214,7 +197,6 @@ class Complaint {
     reference: json['reference'] as String,
     typeLabel: json['typeLabel'] as String,
     categoryLabel: json['categoryLabel'] as String,
-    subtypeLabel: json['subtypeLabel'] as String,
     priority: ComplaintPriorityX.fromCode(json['priority'] as String?),
     title: json['title'] as String,
     detail: json['detail'] as String,
@@ -370,7 +352,7 @@ class ComplaintsService {
   /// rather than pretending it went through.
   Future<Complaint?> raise({
     required String mobileNumber,
-    required String subtypeId,
+    required String typeId,
     required ComplaintPriority priority,
     required String title,
     required String detail,
@@ -381,7 +363,7 @@ class ComplaintsService {
         headers: const {'content-type': 'application/json'},
         body: jsonEncode({
           'mobileNumber': mobileNumber,
-          'subtypeId': subtypeId,
+          'typeId': typeId,
           'priority': priority.code,
           'title': title,
           'detail': detail,

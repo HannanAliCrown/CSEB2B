@@ -1,12 +1,18 @@
-/// One of the chips on step 1 of the complaint wizard, with the narrower
-/// choices under it.
+/// One of the chips on step 1 of the complaint wizard, and what Crown Solar
+/// promises for it at each priority.
+///
+/// There is no second, narrower choice. A partner describes their problem in
+/// their own words; the category is only what routes the ticket.
 class ComplaintTypeRow {
   const ComplaintTypeRow({
+    required this.id,
     required this.code,
     required this.label,
-    required this.subtypes,
+    required this.targets,
     this.shortLabel,
   });
+
+  final String id;
 
   /// Stable across renames. The app maps this to the design's icon, which is
   /// the one thing about a category the database does not hold: an icon is a
@@ -19,33 +25,14 @@ class ComplaintTypeRow {
   /// What the ticket list says. Null means [label] does for both.
   final String? shortLabel;
 
-  final List<ComplaintSubtypeRow> subtypes;
-
-  Map<String, Object?> toJson() => {
-    'code': code,
-    'label': label,
-    'shortLabel': shortLabel,
-    'subtypes': [for (final subtype in subtypes) subtype.toJson()],
-  };
-}
-
-/// "Which part?", and what Crown Solar promises for it at each priority.
-class ComplaintSubtypeRow {
-  const ComplaintSubtypeRow({
-    required this.id,
-    required this.label,
-    required this.targets,
-  });
-
-  final String id;
-  final String label;
-
   /// Keyed by priority: 'low' | 'medium' | 'high'.
   final Map<String, ComplaintTargetRow> targets;
 
   Map<String, Object?> toJson() => {
     'id': id,
+    'code': code,
     'label': label,
+    'shortLabel': shortLabel,
     'targets': {
       for (final entry in targets.entries) entry.key: entry.value.toJson(),
     },
@@ -112,7 +99,6 @@ class ComplaintRow {
     required this.reference,
     required this.typeLabel,
     required this.categoryLabel,
-    required this.subtypeLabel,
     required this.priority,
     required this.title,
     required this.detail,
@@ -134,8 +120,6 @@ class ComplaintRow {
 
   /// The short one, as the list and the detail header say it.
   final String categoryLabel;
-
-  final String subtypeLabel;
 
   /// 'low' | 'medium' | 'high'.
   final String priority;
@@ -168,7 +152,6 @@ class ComplaintRow {
     'reference': reference,
     'typeLabel': typeLabel,
     'categoryLabel': categoryLabel,
-    'subtypeLabel': subtypeLabel,
     'priority': priority,
     'title': title,
     'detail': detail,
@@ -231,8 +214,8 @@ enum ComplaintRefusal {
   /// No account on that number.
   unknownAccount,
 
-  /// No such sub-type, or a priority outside low/medium/high.
-  unknownSubtype,
+  /// No such category, or a priority outside low/medium/high.
+  unknownType,
 
   /// A title or a detail that is empty.
   incomplete,
@@ -240,7 +223,7 @@ enum ComplaintRefusal {
 
 /// Complaints and notifications' persistence boundary.
 abstract interface class ComplaintsDataStore {
-  /// The categories, sub-types and targets the wizard offers.
+  /// The categories and the targets the wizard offers.
   Future<List<ComplaintTypeRow>> catalogue();
 
   /// This partner's tickets, newest first. Both tabs in one call — the list
@@ -257,7 +240,7 @@ abstract interface class ComplaintsDataStore {
   /// Raises a ticket and returns it, or says why not.
   Future<(ComplaintRow?, ComplaintRefusal?)> raiseComplaint({
     required String mobileNumber,
-    required String subtypeId,
+    required String typeId,
     required String priority,
     required String title,
     required String detail,

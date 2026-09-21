@@ -1,6 +1,6 @@
 -- Seed for Complaints and Notifications.
 --
--- The categories, sub-types and targets are reference data Crown Solar owns.
+-- The categories and their targets are reference data Crown Solar owns.
 -- The four tickets and five notifications are the ones drawn on board 08, so
 -- the screens are not empty on first sight.
 --
@@ -31,41 +31,17 @@ WHERE NOT EXISTS (
 );
 
 
-INSERT INTO complaint_subtypes (type_id, label, position)
-SELECT t.id, v.label, v.position
-FROM (VALUES
-  ('qr_and_prizes',      'Prize not credited after scan',        0),
-  ('qr_and_prizes',      'QR already scanned by someone else',   1),
-  ('qr_and_prizes',      'Scan says the product is not genuine', 2),
-  ('wallet_and_cash',    'Cash transfer not received',           0),
-  ('wallet_and_cash',    'Cash request expired',                 1),
-  ('wallet_and_cash',    'Balance looks wrong',                  2),
-  ('points',             'Points missing for a purchase',        0),
-  ('points',             'Points transfer not received',         1),
-  ('shop_branding',      'Board not installed yet',              0),
-  ('shop_branding',      'Board installed incorrectly',          1),
-  ('account_and_access', 'Cannot sign in on a new phone',        0),
-  ('account_and_access', 'My details are wrong',                 1),
-  ('something_else',     'Something else',                       0)
-) AS v (type_code, label, position)
-JOIN complaint_types t ON t.code = v.type_code
-WHERE NOT EXISTS (
-  SELECT 1 FROM complaint_subtypes s
-   WHERE s.type_id = t.id AND s.label = v.label
-);
-
-
 -- ---------------------------------------------------------------------------
 -- What Crown Solar promises
 -- ---------------------------------------------------------------------------
 
--- One band per priority, applied to every sub-type. The design's single
+-- One band per priority, applied to every category. The design's single
 -- stated case — a High-priority prize dispute answered within 4 hours and
 -- resolved within 2 working days — is the 'high' row.
-INSERT INTO complaint_targets (subtype_id, priority, response_minutes,
+INSERT INTO complaint_targets (type_id, priority, response_minutes,
                                resolution_working_days)
-SELECT s.id, v.priority, v.response_minutes, v.resolution_working_days
-FROM complaint_subtypes s
+SELECT t.id, v.priority, v.response_minutes, v.resolution_working_days
+FROM complaint_types t
 CROSS JOIN (VALUES
   ('high',    240, 2),
   ('medium',  480, 3),
@@ -73,7 +49,7 @@ CROSS JOIN (VALUES
 ) AS v (priority, response_minutes, resolution_working_days)
 WHERE NOT EXISTS (
   SELECT 1 FROM complaint_targets g
-   WHERE g.subtype_id = s.id AND g.priority = v.priority
+   WHERE g.type_id = t.id AND g.priority = v.priority
 );
 
 
@@ -82,18 +58,18 @@ WHERE NOT EXISTS (
 -- ---------------------------------------------------------------------------
 
 INSERT INTO complaints (
-  reference, account_id, subtype_id, priority, title, detail, status,
+  reference, account_id, type_id, priority, title, detail, status,
   evidence_note, response_target_minutes, resolution_target_working_days,
   raised_at, first_response_at, resolved_at
 )
 SELECT
-  v.reference, a.id, s.id, v.priority, v.title, v.detail, v.status,
+  v.reference, a.id, t.id, v.priority, v.title, v.detail, v.status,
   v.evidence_note, g.response_minutes, g.resolution_working_days,
   now() - v.raised_ago,
   CASE WHEN v.responded_ago IS NULL THEN NULL ELSE now() - v.responded_ago END,
   CASE WHEN v.resolved_ago  IS NULL THEN NULL ELSE now() - v.resolved_ago  END
 FROM (VALUES
-  ('CMP-2026-5514', 'Prize not credited after scan', 'high',
+  ('CMP-2026-5514', 'qr_and_prizes', 'high',
    'Prize not credited for inverter scan',
    'I scanned a Crown 8kW inverter on 8 September at about 3 pm. The app '
      'showed the prize screen but nothing came into my wallet.',
@@ -102,30 +78,30 @@ FROM (VALUES
      'timestamps · your location at the time of the scan.',
    interval '3 hours 12 minutes', interval '2 hours', NULL),
 
-  ('CMP-2026-5390', 'Board installed incorrectly', 'medium',
+  ('CMP-2026-5390', 'shop_branding', 'medium',
    'Board installed with wrong shop name',
    'The frontlit board that went up yesterday reads "Adnan Solar Work". The '
      'shop name is Adnan Solar Works.',
    'in_progress', NULL,
    interval '17 days', interval '16 days 20 hours', NULL),
 
-  ('CMP-2026-5102', 'Points missing for a purchase', 'medium',
+  ('CMP-2026-5102', 'points', 'medium',
    'Points missing for August purchase',
    'I bought 12 panels on 18 August through Hamza Solar House. No points '
      'were posted against the invoice.',
    'resolved', NULL,
    interval '30 days', interval '29 days 18 hours', interval '27 days'),
 
-  ('CMP-2026-4977', 'Cannot sign in on a new phone', 'low',
+  ('CMP-2026-4977', 'account_and_access', 'low',
    'Cannot sign in on my new phone',
    'My old handset broke. The app says my account is fixed to another '
      'device and will not let me in.',
    'resolved', NULL,
    interval '38 days', interval '37 days', interval '35 days')
-) AS v (reference, subtype_label, priority, title, detail, status,
+) AS v (reference, type_code, priority, title, detail, status,
         evidence_note, raised_ago, responded_ago, resolved_ago)
-JOIN complaint_subtypes s ON s.label = v.subtype_label
-JOIN complaint_targets  g ON g.subtype_id = s.id AND g.priority = v.priority
+JOIN complaint_types   t ON t.code = v.type_code
+JOIN complaint_targets g ON g.type_id = t.id AND g.priority = v.priority
 CROSS JOIN (
   SELECT id FROM accounts WHERE mobile_number = '3004821190'
 ) AS a

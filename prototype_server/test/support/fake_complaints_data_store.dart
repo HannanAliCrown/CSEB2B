@@ -20,18 +20,19 @@ class FakeComplaintsDataStore implements ComplaintsDataStore {
   void addAccount(String mobileNumber) =>
       _accounts[normaliseMobile(mobileNumber)] = 'acc${_nextId++}';
 
-  /// A category with one sub-type, banded at every priority.
-  ComplaintSubtypeRow addType({
+  /// A category banded at every priority.
+  ComplaintTypeRow addType({
     required String code,
     required String label,
-    required String subtype,
     String? shortLabel,
     int responseMinutes = 240,
     int resolutionWorkingDays = 2,
   }) {
-    final row = ComplaintSubtypeRow(
-      id: 'sub${_nextId++}',
-      label: subtype,
+    final row = ComplaintTypeRow(
+      id: 'typ${_nextId++}',
+      code: code,
+      label: label,
+      shortLabel: shortLabel,
       targets: {
         for (final priority in const ['low', 'medium', 'high'])
           priority: ComplaintTargetRow(
@@ -40,14 +41,7 @@ class FakeComplaintsDataStore implements ComplaintsDataStore {
           ),
       },
     );
-    _types.add(
-      ComplaintTypeRow(
-        code: code,
-        label: label,
-        shortLabel: shortLabel,
-        subtypes: [row],
-      ),
-    );
+    _types.add(row);
     return row;
   }
 
@@ -108,7 +102,7 @@ class FakeComplaintsDataStore implements ComplaintsDataStore {
   @override
   Future<(ComplaintRow?, ComplaintRefusal?)> raiseComplaint({
     required String mobileNumber,
-    required String subtypeId,
+    required String typeId,
     required String priority,
     required String title,
     required String detail,
@@ -121,39 +115,36 @@ class FakeComplaintsDataStore implements ComplaintsDataStore {
     if (accountId == null) return (null, ComplaintRefusal.unknownAccount);
 
     for (final type in _types) {
-      for (final subtype in type.subtypes) {
-        if (subtype.id != subtypeId) continue;
-        final target = subtype.targets[priority];
-        if (target == null) return (null, ComplaintRefusal.unknownSubtype);
+      if (type.id != typeId) continue;
+      final target = type.targets[priority];
+      if (target == null) return (null, ComplaintRefusal.unknownType);
 
-        final reference = 'CMP-2026-${_nextReference++}';
-        _complaints[reference] = _Complaint(
-          reference: reference,
+      final reference = 'CMP-2026-${_nextReference++}';
+      _complaints[reference] = _Complaint(
+        reference: reference,
+        accountId: accountId,
+        typeLabel: type.label,
+        categoryLabel: type.shortLabel ?? type.label,
+        priority: priority,
+        title: title.trim(),
+        detail: detail.trim(),
+        // Copied in, not looked up later.
+        responseTargetMinutes: target.responseMinutes,
+        resolutionTargetWorkingDays: target.resolutionWorkingDays,
+      );
+      _notifications.add(
+        _Notification(
+          id: 'ntf${_nextId++}',
           accountId: accountId,
-          typeLabel: type.label,
-          categoryLabel: type.shortLabel ?? type.label,
-          subtypeLabel: subtype.label,
-          priority: priority,
-          title: title.trim(),
-          detail: detail.trim(),
-          // Copied in, not looked up later.
-          responseTargetMinutes: target.responseMinutes,
-          resolutionTargetWorkingDays: target.resolutionWorkingDays,
-        );
-        _notifications.add(
-          _Notification(
-            id: 'ntf${_nextId++}',
-            accountId: accountId,
-            title: 'Complaint $reference raised',
-          ),
-        );
-        return (
-          await complaint(mobileNumber: mobileNumber, reference: reference),
-          null,
-        );
-      }
+          title: 'Complaint $reference raised',
+        ),
+      );
+      return (
+        await complaint(mobileNumber: mobileNumber, reference: reference),
+        null,
+      );
     }
-    return (null, ComplaintRefusal.unknownSubtype);
+    return (null, ComplaintRefusal.unknownType);
   }
 
   @override
@@ -195,7 +186,6 @@ class _Complaint {
     required this.accountId,
     required this.typeLabel,
     required this.categoryLabel,
-    required this.subtypeLabel,
     required this.priority,
     required this.title,
     required this.detail,
@@ -207,7 +197,6 @@ class _Complaint {
   final String accountId;
   final String typeLabel;
   final String categoryLabel;
-  final String subtypeLabel;
   final String priority;
   final String title;
   final String detail;
@@ -221,7 +210,6 @@ class _Complaint {
         reference: reference,
         typeLabel: typeLabel,
         categoryLabel: categoryLabel,
-        subtypeLabel: subtypeLabel,
         priority: priority,
         title: title,
         detail: detail,

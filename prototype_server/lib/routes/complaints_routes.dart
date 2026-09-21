@@ -65,26 +65,26 @@ Router complaintsRoutes(ComplaintsDataStore store) {
   router.post('/complaints', (Request request) async {
     final body = await readJsonBody(request);
     final mobileNumber = body['mobileNumber'] as String?;
-    final subtypeId = body['subtypeId'] as String?;
+    final typeId = body['typeId'] as String?;
     final priority = body['priority'] as String?;
     final title = body['title'] as String?;
     final detail = body['detail'] as String?;
 
     if (mobileNumber == null ||
-        subtypeId == null ||
+        typeId == null ||
         priority == null ||
         title == null ||
         detail == null) {
       return jsonResponse(400, {
         'error':
-            'mobileNumber, subtypeId, priority, title and detail are '
+            'mobileNumber, typeId, priority, title and detail are '
             'required',
       });
     }
 
     final (complaint, refusal) = await store.raiseComplaint(
       mobileNumber: mobileNumber,
-      subtypeId: subtypeId,
+      typeId: typeId,
       priority: priority,
       title: title,
       detail: detail,
@@ -95,8 +95,8 @@ Router complaintsRoutes(ComplaintsDataStore store) {
       ComplaintRefusal.unknownAccount => jsonResponse(404, {
         'error': 'unknown_account',
       }),
-      ComplaintRefusal.unknownSubtype => jsonResponse(400, {
-        'error': 'unknown_subtype',
+      ComplaintRefusal.unknownType => jsonResponse(400, {
+        'error': 'unknown_type',
       }),
       ComplaintRefusal.incomplete => jsonResponse(400, {
         'error': 'title_and_detail_required',

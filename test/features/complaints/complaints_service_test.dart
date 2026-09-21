@@ -14,7 +14,6 @@ Complaint complaintJson({
   'reference': 'CMP-2026-5514',
   'typeLabel': 'QR and prizes',
   'categoryLabel': 'QR prize dispute',
-  'subtypeLabel': 'Prize not credited after scan',
   'priority': 'high',
   'title': 'Prize not credited for inverter scan',
   'detail': 'The app showed the prize screen but nothing arrived.',
