@@ -36,6 +36,10 @@ class _InaamTabState extends State<InaamTab> {
   bool _reachable = true;
   bool _busy = false;
 
+  /// How many spins the history card shows before "See all".
+  static const _historyPreview = 3;
+  bool _allHistory = false;
+
   @override
   void initState() {
     super.initState();
@@ -242,7 +246,16 @@ class _InaamTabState extends State<InaamTab> {
           ),
         ),
       const SizedBox(height: AppSpacing.lg),
-      const DsSectionHeader(title: 'Spin history'),
+      DsSectionHeader(
+        title: 'Spin history',
+        // "See all" opens nothing: the rest of the history is already here,
+        // just folded. A control that led to a screen which does not exist
+        // would be worse than none.
+        actionLabel: spin.history.length > _historyPreview && !_allHistory
+            ? 'See all'
+            : null,
+        onAction: () => setState(() => _allHistory = true),
+      ),
       if (spin.history.isEmpty)
         const DsCaption('Your spins will be listed here once you take one.')
       else
@@ -250,10 +263,10 @@ class _InaamTabState extends State<InaamTab> {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
           child: Column(
             children: [
-              for (var i = 0; i < spin.history.length; i++) ...[
+              for (var i = 0; i < _visibleHistory(spin).length; i++) ...[
                 DsSettingRow(
-                  label: 'Rs. ${spin.history[i].amount.formatted}',
-                  meta: formatSpinWhen(spin.history[i].spunAt),
+                  label: 'Rs. ${_visibleHistory(spin)[i].amount.formatted}',
+                  meta: formatSpinWhen(_visibleHistory(spin)[i].spunAt),
                   leading: const DsIconMedallion(
                     icon: LucideIcons.sparkles,
                     tone: DsTone.solar,
@@ -265,13 +278,19 @@ class _InaamTabState extends State<InaamTab> {
                     tone: DsTone.success,
                   ),
                 ),
-                if (i != spin.history.length - 1) const DsHairline(),
+                if (i != _visibleHistory(spin).length - 1) const DsHairline(),
               ],
             ],
           ),
         ),
     ];
   }
+
+  /// Three, as the design draws it, until "See all" is pressed.
+  List<Spin> _visibleHistory(SpinState spin) =>
+      _allHistory || spin.history.length <= _historyPreview
+      ? spin.history
+      : spin.history.take(_historyPreview).toList();
 
   static Money _largest(List<Money> prizes) {
     var best = prizes.first;
@@ -558,6 +577,13 @@ class _InaamTabState extends State<InaamTab> {
 
     return [
       for (final scheme in schemes) ...[
+        // The design draws one scheme, so its card carries no name. Crown
+        // Solar can run several, and then each needs saying which it is —
+        // above the card rather than inside it, so the card is unchanged.
+        // The end date is not here but in the card's note below: a scheme
+        // name and a date share this row badly, and the name truncating is
+        // the worse of the two.
+        if (schemes.length > 1) DsSectionHeader(title: scheme.name),
         if (scheme.claimed)
           ..._claimedScheme(scheme)
         else
@@ -577,17 +603,6 @@ class _InaamTabState extends State<InaamTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Several schemes can run at once, so each says which it is
-            // before it says how far along it is.
-            Text(
-              scheme.name,
-              style: context.texts.bodyLarge?.copyWith(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            DsCaption('Ends ${formatInaamDate(scheme.endsOn)}'),
-            const SizedBox(height: AppSpacing.md),
             Text(
               scheme.byScans ? 'MEASURED ON SCANS' : 'MEASURED ON AMOUNT',
               style: TextStyle(
@@ -636,15 +651,18 @@ class _InaamTabState extends State<InaamTab> {
           ],
         ),
       ),
-      // Stated before the button is ever pressed, not after.
+      // Stated before the button is ever pressed, not after — and naming the
+      // tiers it would close, because "the rest" is not a number a partner
+      // can weigh.
       if (claimable != null) ...[
         const SizedBox(height: AppSpacing.md),
-        const DsNotice(
+        DsNotice(
           icon: LucideIcons.triangleAlert,
           tone: DsTone.warning,
           message:
-              'You can claim one tier only. Taking this one now closes the '
-              'rest for good, even if you reach their targets later.',
+              'You can claim one tier only. Taking ${claimable.name} now '
+              'closes ${_closingNames(scheme, claimable)} for good, even if '
+              'you reach their targets later.',
         ),
       ],
       const SizedBox(height: AppSpacing.md),
@@ -706,8 +724,7 @@ class _InaamTabState extends State<InaamTab> {
           ),
           const SizedBox(height: AppSpacing.sm),
           DsBody(
-            '${scheme.name} · Ref ${scheme.claimedReference} · Credited to '
-            'your wallet.',
+            'Ref ${scheme.claimedReference} · Credited to your wallet.',
             size: 14,
             align: TextAlign.center,
           ),
@@ -725,22 +742,31 @@ class _InaamTabState extends State<InaamTab> {
       ),
     ),
     const SizedBox(height: AppSpacing.sm),
-    DsCard(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Column(
-        children: [
+    Builder(
+      builder: (context) {
+        final closed = [
           for (final tier in scheme.tiers)
-            if (tier.name != scheme.claimedTierName)
-              TierRow(
-                name: tier.name,
-                requirement: _tierRequirement(scheme, tier),
-                reward: 'Rs. ${tier.reward.formatted}',
-                status: 'Closed',
-                statusTone: DsTone.neutral,
-                closed: true,
-              ),
-        ],
-      ),
+            if (tier.name != scheme.claimedTierName) tier,
+        ];
+        return DsCard(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Column(
+            children: [
+              for (var i = 0; i < closed.length; i++) ...[
+                TierRow(
+                  name: closed[i].name,
+                  requirement: _tierRequirement(scheme, closed[i]),
+                  reward: 'Rs. ${closed[i].reward.formatted}',
+                  status: 'Closed',
+                  statusTone: DsTone.neutral,
+                  closed: true,
+                ),
+                if (i != closed.length - 1) const DsHairline(),
+              ],
+            ],
+          ),
+        );
+      },
     ),
     const SizedBox(height: AppSpacing.md),
     const DsCaption(
@@ -749,22 +775,64 @@ class _InaamTabState extends State<InaamTab> {
     ),
   ];
 
+  /// "Silver reached at 150 · 132 more scans for Gold" — what has been
+  /// earned, then what is still ahead. Either clause alone when there is
+  /// only one.
   String _schemeNote(ItemScheme scheme) {
+    final reached = scheme.claimable;
     final next = scheme.next;
-    if (next == null) return 'Every tier reached.';
-    final gap = next.threshold - scheme.progress;
-    return scheme.byScans
-        ? '$gap more scans for ${next.name}'
-        : 'PKR ${Money(gap).formatted} more for ${next.name}';
+
+    final earned = reached == null
+        ? null
+        : scheme.byScans
+        ? '${reached.name} reached at ${reached.threshold}'
+        : '${reached.name} reached at '
+              '${_amount(reached.threshold)}';
+
+    final ahead = next == null
+        ? null
+        : scheme.byScans
+        ? '${next.threshold - scheme.progress} more scans for ${next.name}'
+        : 'PKR ${Money(next.threshold - scheme.progress).formatted} more '
+              'for ${next.name}';
+
+    final ends = 'ends ${formatInaamDate(scheme.endsOn)}';
+    if (earned == null && ahead == null) return 'Every tier reached · $ends';
+    return [?earned, ?ahead, ends].join(' · ');
+  }
+
+  /// The tiers a claim would close, named. "Gold and Platinum", not "2 more".
+  String _closingNames(ItemScheme scheme, SchemeTier taking) {
+    final closing = [
+      for (final tier in scheme.tiers)
+        if (tier.id != taking.id && tier.threshold > taking.threshold)
+          tier.name,
+    ];
+    if (closing.isEmpty) return 'the rest of this scheme';
+    if (closing.length == 1) return closing.single;
+    return '${closing.sublist(0, closing.length - 1).join(', ')} and '
+        '${closing.last}';
   }
 
   String _tierRequirement(ItemScheme scheme, SchemeTier tier) {
     if (!scheme.byScans) {
-      return 'PKR ${Money(tier.threshold).formatted} in purchases';
+      return 'PKR ${_amount(tier.threshold)} in purchases';
     }
     if (tier.reached) return '${tier.threshold} scans · reached';
     return '${tier.threshold} scans · '
         '${tier.threshold - scheme.progress} to go';
+  }
+
+  /// "1.2 M" as the design abbreviates a target, because a tier row has no
+  /// room for 1,200,000 beside its reward.
+  static String _amount(int paisa) {
+    final rupees = paisa ~/ 100;
+    if (rupees < 100000) return Money(paisa).formatted;
+    final millions = rupees / 1000000;
+    final text = millions.toStringAsFixed(
+      millions == millions.roundToDouble() ? 0 : 1,
+    );
+    return '$text M';
   }
 
   /// Board 09 · B3 — the cost of claiming now, in the partner's own numbers.
