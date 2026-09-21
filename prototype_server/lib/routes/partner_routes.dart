@@ -235,3 +235,81 @@ Router partnerRoutes(PartnerDataStore store) {
 
   return router;
 }
+
+/// New profile requests: registrations naming this partner as their buying
+/// source.
+///
+/// Mounted from [partnerRoutes] so it shares the same store.
+Router profileRequestRoutes(PartnerDataStore store) {
+  final router = Router();
+
+  /// `GET /profile-requests/expected-purchase` — the bands a buying source
+  /// picks from before approving. Registered first so the reference route
+  /// cannot swallow it.
+  router.get('/profile-requests/expected-purchase', (Request request) async {
+    final bands = await store.expectedPurchaseBands();
+    return jsonResponse(200, {
+      'bands': [for (final band in bands) band.toJson()],
+    });
+  });
+
+  /// `GET /profile-requests?mobileNumber=` — the ones waiting on this
+  /// partner. Decided ones are gone; this is an inbox, not a history.
+  router.get('/profile-requests', (Request request) async {
+    final mobileNumber = request.url.queryParameters['mobileNumber'];
+    if (mobileNumber == null || mobileNumber.isEmpty) {
+      return jsonResponse(400, {'error': 'mobileNumber is required'});
+    }
+
+    final requests = await store.profileRequests(mobileNumber);
+    if (requests == null) {
+      return jsonResponse(404, {'error': 'unknown_account'});
+    }
+    return jsonResponse(200, {
+      'requests': [for (final one in requests) one.toJson()],
+      'outstanding': requests.length,
+    });
+  });
+
+  /// `POST /profile-requests/decision` — approve or reject one.
+  router.post('/profile-requests/decision', (Request request) async {
+    final body = await readJsonBody(request);
+    final mobileNumber = body['mobileNumber'] as String?;
+    final applicationId = body['applicationId'] as String?;
+    final approved = body['approved'] as bool?;
+
+    if (mobileNumber == null || applicationId == null || approved == null) {
+      return jsonResponse(400, {
+        'error': 'mobileNumber, applicationId and approved are required',
+      });
+    }
+
+    final refusal = await store.decideProfileRequest(
+      mobileNumber: mobileNumber,
+      applicationId: applicationId,
+      approved: approved,
+      expectedPurchaseBandId: body['expectedPurchaseBandId'] as String?,
+      note: body['note'] as String?,
+    );
+
+    return switch (refusal) {
+      null => jsonResponse(200, {'decided': true}),
+      ProfileRequestRefusal.unknownAccount => jsonResponse(404, {
+        'error': 'unknown_account',
+      }),
+      // Not found rather than forbidden: the answer must not confirm that
+      // someone else's application exists.
+      ProfileRequestRefusal.notOutstanding => jsonResponse(404, {
+        'error': 'not_outstanding',
+      }),
+      ProfileRequestRefusal.expectationMissing => jsonResponse(400, {
+        'error': 'expected_purchase_required',
+      }),
+      ProfileRequestRefusal.reasonMissing => jsonResponse(400, {
+        'error': 'reason_required',
+      }),
+    };
+  });
+
+  return router;
+}

@@ -389,3 +389,124 @@ class SubmitResult {
   /// are not another applicant's business.
   final String? heldBy;
 }
+
+/// A registration waiting on the partner who was named as its buying source.
+///
+/// The applicant said "I buy from you"; this is what the app shows that
+/// partner so they can say whether it is true.
+class ProfileRequestRow {
+  const ProfileRequestRow({
+    required this.applicationId,
+    required this.reference,
+    required this.mobileNumber,
+    required this.contactName,
+    required this.businessName,
+    required this.role,
+    required this.submittedAt,
+    this.businessAddress,
+    this.marketName,
+    this.alternateNumber,
+    this.shopLatitude,
+    this.shopLongitude,
+    this.otherBuyingSources = const [],
+    this.media = const [],
+  });
+
+  final String applicationId;
+
+  /// What the applicant quotes, e.g. 'CSE-4821190'.
+  final String reference;
+
+  final String mobileNumber;
+  final String contactName;
+  final String businessName;
+
+  /// 'installer' or 'retailer' — the only two that can apply.
+  final String role;
+
+  final String? businessAddress;
+  final String? marketName;
+  final DateTime submittedAt;
+
+  /// Everything else the applicant gave, except their CNIC number — which
+  /// the buying source has no need for and so never receives.
+  final String? alternateNumber;
+  final String? shopLatitude;
+  final String? shopLongitude;
+
+  /// The other places they said they buy from, so the buying source can see
+  /// they are not the only one named.
+  final List<String> otherBuyingSources;
+
+  final List<ProfileRequestMedia> media;
+
+  Map<String, Object?> toJson() => {
+    'applicationId': applicationId,
+    'reference': reference,
+    'mobileNumber': mobileNumber,
+    'contactName': contactName,
+    'businessName': businessName,
+    'role': role,
+    'businessAddress': businessAddress,
+    'marketName': marketName,
+    "submittedAt": submittedAt.toUtc().toIso8601String(),
+    "alternateNumber": alternateNumber,
+    "shopLatitude": shopLatitude,
+    "shopLongitude": shopLongitude,
+    "otherBuyingSources": otherBuyingSources,
+    "media": [for (final item in media) item.toJson()],
+  };
+}
+
+/// Why a decision on a profile request could not be recorded.
+enum ProfileRequestRefusal {
+  /// No account on the deciding number.
+  unknownAccount,
+
+  /// No outstanding request on that application for this partner — either it
+  /// was never theirs to decide, or someone already decided it.
+  notOutstanding,
+
+  /// Approving without saying what this applicant is expected to buy. The
+  /// figure is the point of asking the buying source at all.
+  expectationMissing,
+
+  /// Rejecting without a reason. A refusal that ends someone's registration
+  /// owes them one.
+  reasonMissing,
+}
+
+/// One thing the applicant submitted with their registration.
+///
+/// CNIC images never reach this type. The buying source is verifying that
+/// someone buys from them, not identifying them — so the identity documents
+/// are left in the application where CRM can see them, and go no further.
+class ProfileRequestMedia {
+  const ProfileRequestMedia({required this.kind, this.slot, this.linkUrl});
+
+  /// 'video_link' | 'shop_image' | 'selfie'.
+  final String kind;
+
+  /// The design's slot name, e.g. 'Shop Board'.
+  final String? slot;
+
+  /// Set for a video the applicant typed a link to. An image lives on their
+  /// own phone until file upload is built, so there is nothing to fetch.
+  final String? linkUrl;
+
+  Map<String, Object?> toJson() => {
+    'kind': kind,
+    'slot': slot,
+    'linkUrl': linkUrl,
+  };
+}
+
+/// One band of expected monthly purchasing.
+class ExpectedPurchaseBand {
+  const ExpectedPurchaseBand({required this.id, required this.label});
+
+  final String id;
+  final String label;
+
+  Map<String, Object?> toJson() => {'id': id, 'label': label};
+}

@@ -6,6 +6,8 @@ import '../../core/ui/ds.dart';
 import '../../features/chat/data/chat_repository.dart';
 import '../../features/chat/ui/views/chat_list_tab.dart';
 import '../../features/home/ui/views/dashboard_screen.dart';
+import '../../features/inaam_baazar/ui/views/inaam_tab.dart';
+import '../../features/points/ui/views/points_tab.dart';
 import '../../features/profile/ui/views/profile_tab.dart';
 import '../../features/session/data/signed_in_user.dart';
 import '../../features/session/ui/session_controller.dart';
@@ -22,23 +24,42 @@ class AppShell extends StatefulWidget {
     required this.onSendCash,
     required this.onViewLedger,
     required this.onScan,
+    required this.onComplaints,
+    required this.onNotifications,
+    required this.onProfileRequests,
+    required this.onCashRequests,
+    required this.onSendPoints,
+    required this.onViewTargets,
+    required this.onPointsLedger,
     required this.onSignOut,
     required this.onShowQrCode,
     required this.onSyncContacts,
     required this.onNewConversation,
     required this.onOpenThread,
     required this.onOpenPost,
+    required this.onOpenSetting,
   });
 
   final VoidCallback onSendCash;
   final VoidCallback onViewLedger;
   final VoidCallback onScan;
+  final VoidCallback onComplaints;
+  final VoidCallback onNotifications;
+  final Future<void> Function() onProfileRequests;
+  final Future<void> Function() onCashRequests;
+
+  /// The three places the Points hub leads. Each is awaited, so the hub
+  /// reloads rather than showing a balance from before the partner left it.
+  final Future<void> Function() onSendPoints;
+  final Future<void> Function() onViewTargets;
+  final Future<void> Function() onPointsLedger;
   final VoidCallback onSignOut;
   final VoidCallback onShowQrCode;
   final VoidCallback onSyncContacts;
   final VoidCallback onNewConversation;
   final ValueChanged<ChatParty> onOpenThread;
   final ValueChanged<SpacePost> onOpenPost;
+  final Future<void> Function(String route) onOpenSetting;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -47,8 +68,12 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   String _tab = 'home';
 
-  /// Installers and retailers earn prizes, so their third destination is
-  /// Inaam; the trade roles track Points instead.
+  /// The third destination, which is the only one that differs by role
+  /// (board 03 · A1–A4): Inaam for an installer, Points for everyone who
+  /// sells on.
+  ///
+  /// Not [PartnerRoleX.earnsPrizes] — a retailer earns scan prizes and still
+  /// belongs on Points, so the two questions are kept apart.
   List<DsNavItem> _navFor(PartnerRole role) => [
     const DsNavItem(id: 'home', label: 'Home', icon: LucideIcons.house),
     const DsNavItem(
@@ -56,7 +81,7 @@ class _AppShellState extends State<AppShell> {
       label: 'Space',
       icon: LucideIcons.messagesSquare,
     ),
-    if (role.earnsPrizes)
+    if (role == PartnerRole.installer)
       const DsNavItem(id: 'inaam', label: 'Inaam', icon: LucideIcons.gift)
     else
       const DsNavItem(id: 'points', label: 'Points', icon: LucideIcons.award),
@@ -78,9 +103,19 @@ class _AppShellState extends State<AppShell> {
           onSendCash: widget.onSendCash,
           onViewLedger: widget.onViewLedger,
           onScan: widget.onScan,
+          onComplaints: widget.onComplaints,
+          onNotifications: widget.onNotifications,
+          onProfileRequests: widget.onProfileRequests,
+          onCashRequests: widget.onCashRequests,
           onOpenModule: _comingSoon,
         ),
         'space' => SpaceFeedTab(onOpenPost: widget.onOpenPost),
+        'inaam' => InaamTab(onOpenScanner: widget.onScan),
+        'points' => PointsTab(
+          onSendPoints: widget.onSendPoints,
+          onViewTargets: widget.onViewTargets,
+          onSeeAllEntries: widget.onPointsLedger,
+        ),
         'chat' => ChatListTab(
           onNewConversation: widget.onNewConversation,
           onOpenThread: widget.onOpenThread,
@@ -88,6 +123,7 @@ class _AppShellState extends State<AppShell> {
         'profile' => ProfileTab(
           onShowQrCode: widget.onShowQrCode,
           onSyncContacts: widget.onSyncContacts,
+          onOpenSetting: widget.onOpenSetting,
           onSignOut: () async {
             await context.read<SessionController>().signOut();
             widget.onSignOut();

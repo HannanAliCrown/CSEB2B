@@ -149,6 +149,11 @@ abstract interface class WalletRepository {
   /// rather than going stale behind another screen.
   Listenable get changes;
 
+  /// Says a balance moved without this repository being the one that moved
+  /// it. Inaam prizes are credited by the server inside the transaction that
+  /// awarded them, so the row exists before anything here knows of it.
+  void announceChange();
+
   Future<Money> balance(SignedInUser user);
 
   /// Credits a prize won by scanning a product, so the wallet and the ledger
@@ -203,6 +208,9 @@ class MockWalletRepository implements WalletRepository {
 
   /// Anything watching a balance is told the moment one moves.
   void _announce() => _changes.announce();
+
+  @override
+  void announceChange() => _announce();
 
   @override
   Future<LedgerEntry> creditScanPrize({

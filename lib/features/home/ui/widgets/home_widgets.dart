@@ -14,11 +14,16 @@ class HomeHeader extends StatelessWidget {
     required this.businessName,
     required this.role,
     this.hasUnread = true,
+    this.onNotifications,
   });
 
   final String businessName;
   final String role;
   final bool hasUnread;
+
+  /// Opens the notification centre. Null on the design boards, where the
+  /// bell is drawn rather than pressed.
+  final VoidCallback? onNotifications;
 
   @override
   Widget build(BuildContext context) {
@@ -62,34 +67,43 @@ class HomeHeader extends StatelessWidget {
           ),
           Stack(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: context.colors.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: context.colors.outline),
-                ),
-                child: Icon(
-                  LucideIcons.bell,
-                  size: 20,
-                  color: context.colors.onSurfaceVariant,
+              // The circle is the visible control, so the tap target is the
+              // circle itself rather than the badge sitting over it.
+              InkWell(
+                onTap: onNotifications,
+                customBorder: const CircleBorder(),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: context.colors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: context.colors.outline),
+                  ),
+                  child: Icon(
+                    LucideIcons.bell,
+                    size: 20,
+                    color: context.colors.onSurfaceVariant,
+                  ),
                 ),
               ),
               if (hasUnread)
                 Positioned(
                   top: 8,
                   right: 9,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: context.colors.error,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: context.colors.surface,
-                        width: 2,
+                  // The dot sits over the bell; it must not eat its taps.
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: context.colors.error,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: context.colors.surface,
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),

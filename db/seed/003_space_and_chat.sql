@@ -14,26 +14,49 @@ BEGIN;
 -- Space posts
 -- ---------------------------------------------------------------------------
 
+-- Every post carries a picture. `image_url` is what the publishing
+-- application writes; these stand-ins are placeholders until Crown Solar's
+-- own photographs are in place, and a post with no picture still renders —
+-- the card simply leaves the panel out.
 INSERT INTO space_posts (title, body, image_url, audience, posted_at)
 SELECT v.title, v.body, v.image_url, v.audience, now() - (v.hours_ago || ' hours')::interval
 FROM (VALUES
   ('Dealer meet-up in Lahore on 20 September',
    'Doors open at 10 am at Pearl Continental. Bring your profile QR for attendance. Lunch and the new product briefing are included.',
-   NULL, 'all', 4),
+   'https://picsum.photos/seed/crown-meetup/900/400', 'all', 4),
   ('New 8kW hybrid inverter is now shipping',
    'The CS-8K hybrid ships from the Lahore plant this week. It carries a five-year warranty and works with the existing mounting kit.',
-   NULL, 'all', 24),
+   'https://picsum.photos/seed/crown-inverter/900/400', 'all', 24),
   ('Installer certification, free this month',
    'Two-day certification at the Lahore training centre. Certified installers appear first when a customer searches their area.',
-   NULL, 'installer', 48),
+   'https://picsum.photos/seed/crown-training/900/400', 'installer', 48),
   ('Frontlit shop boards: requests open until 30 September',
    'Retailers can request a new frontlit board through Shop Branding. The supplier calls within three working days.',
-   NULL, 'retailer', 72),
+   'https://picsum.photos/seed/crown-branding/900/400', 'retailer', 72),
   ('Quarterly targets close on 30 September',
    'Hit 80% of your quarterly target to unlock the annual bonus band. Your progress is on the Points screen.',
-   NULL, 'trade', 96)
+   'https://picsum.photos/seed/crown-targets/900/400', 'trade', 96)
 ) AS v (title, body, image_url, audience, hours_ago)
 WHERE NOT EXISTS (SELECT 1 FROM space_posts p WHERE p.title = v.title);
+
+
+-- The insert above does nothing on a database seeded before the pictures
+-- existed, so they are filled in here too. Only where there is none: a
+-- picture the publishing application has since set is never overwritten.
+UPDATE space_posts p SET image_url = v.image_url
+FROM (VALUES
+  ('Dealer meet-up in Lahore on 20 September',
+   'https://picsum.photos/seed/crown-meetup/900/400'),
+  ('New 8kW hybrid inverter is now shipping',
+   'https://picsum.photos/seed/crown-inverter/900/400'),
+  ('Installer certification, free this month',
+   'https://picsum.photos/seed/crown-training/900/400'),
+  ('Frontlit shop boards: requests open until 30 September',
+   'https://picsum.photos/seed/crown-branding/900/400'),
+  ('Quarterly targets close on 30 September',
+   'https://picsum.photos/seed/crown-targets/900/400')
+) AS v (title, image_url)
+WHERE p.title = v.title AND p.image_url IS NULL;
 
 
 -- Comments on the meet-up post, with one official reply under the first.

@@ -62,4 +62,28 @@ abstract interface class PartnerDataStore {
   /// Writes the application, its buying sources, its media and its three
   /// outstanding approvals in one transaction.
   Future<SubmitResult> submitApplication(ApplicationInput input);
+
+  // --- New profile requests ---
+
+  /// Registrations naming this partner as their buying source and still
+  /// waiting on them. Null when the number has no account.
+  Future<List<ProfileRequestRow>?> profileRequests(String mobileNumber);
+
+  /// The bands a buying source picks from before approving someone.
+  Future<List<ExpectedPurchaseBand>> expectedPurchaseBands();
+
+  /// Records this partner's verdict on one request.
+  ///
+  /// Only the buying source's own approval is touched: the marketing officer
+  /// and CRM still have to make up their own minds, so approving here opens
+  /// nobody's account by itself.
+  /// Approving needs [expectedPurchaseBandId]; rejecting needs [note]. Both
+  /// are also enforced by the database, so neither can be skipped.
+  Future<ProfileRequestRefusal?> decideProfileRequest({
+    required String mobileNumber,
+    required String applicationId,
+    required bool approved,
+    String? expectedPurchaseBandId,
+    String? note,
+  });
 }

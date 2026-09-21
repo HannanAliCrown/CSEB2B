@@ -230,6 +230,98 @@ class FakePartnerDataStore implements PartnerDataStore {
       ],
     );
     _applications.add(application);
+    // The first buying source is the one asked to verify, exactly as the SQL
+    // has it — which is what puts this application in their inbox.
+    if (first != null) _sourceAccountByApplication[application.id] = first.id;
     return SubmitResult.accepted(application);
+  }
+
+  // --- New profile requests ---
+
+  /// Who the applicant named as their buying source, by application id. The
+  /// SQL joins `registration_buying_sources`; here it is kept beside the
+  /// application because nothing else needs it.
+  final Map<String, String> _sourceAccountByApplication = {};
+
+  /// The buying source's verdict, absent while it is still outstanding.
+  final Map<String, bool> _decisionByApplication = {};
+
+  @override
+  Future<List<ProfileRequestRow>?> profileRequests(String mobileNumber) async {
+    final account = await findAccountByMobileNumber(mobileNumber);
+    if (account == null) return null;
+
+    return [
+      for (final application in _applications)
+        if (application.status == 'submitted' &&
+            _sourceAccountByApplication[application.id] == account.id &&
+            !_decisionByApplication.containsKey(application.id))
+          ProfileRequestRow(
+            applicationId: application.id,
+            reference: application.reference,
+            mobileNumber: application.mobileNumber,
+            contactName: application.contactName ?? '',
+            businessName: application.businessName ?? '',
+            role: application.role ?? 'installer',
+            submittedAt: application.submittedAt,
+            marketName: application.marketName,
+          ),
+    ]..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+  }
+
+  @override
+  Future<List<ExpectedPurchaseBand>> expectedPurchaseBands() async => const [
+    ExpectedPurchaseBand(id: 'band1', label: 'Up to PKR 100,000 a month'),
+    ExpectedPurchaseBand(id: 'band2', label: 'Over PKR 100,000 a month'),
+  ];
+
+  @override
+  Future<ProfileRequestRefusal?> decideProfileRequest({
+    required String mobileNumber,
+    required String applicationId,
+    required bool approved,
+    String? expectedPurchaseBandId,
+    String? note,
+  }) async {
+    // The same two rules the SQL constraints enforce.
+    if (approved && expectedPurchaseBandId == null) {
+      return ProfileRequestRefusal.expectationMissing;
+    }
+    if (!approved && (note == null || note.trim().isEmpty)) {
+      return ProfileRequestRefusal.reasonMissing;
+    }
+
+    final account = await findAccountByMobileNumber(mobileNumber);
+    if (account == null) return ProfileRequestRefusal.unknownAccount;
+
+    // Not theirs to decide, or already decided — the same answer either way,
+    // so neither reveals anything about the other.
+    if (_sourceAccountByApplication[applicationId] != account.id ||
+        _decisionByApplication.containsKey(applicationId)) {
+      return ProfileRequestRefusal.notOutstanding;
+    }
+
+    _decisionByApplication[applicationId] = approved;
+    if (!approved) _reject(applicationId);
+    return null;
+  }
+
+  void _reject(String applicationId) {
+    final index = _applications.indexWhere((a) => a.id == applicationId);
+    if (index < 0) return;
+    final old = _applications[index];
+    _applications[index] = ApplicationRow(
+      id: old.id,
+      reference: old.reference,
+      mobileNumber: old.mobileNumber,
+      status: 'rejected',
+      submittedAt: old.submittedAt,
+      verifyingSourceName: old.verifyingSourceName,
+      approvals: old.approvals,
+      businessName: old.businessName,
+      contactName: old.contactName,
+      role: old.role,
+      marketName: old.marketName,
+    );
   }
 }

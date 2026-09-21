@@ -26,9 +26,19 @@ class _ScanScreenState extends State<ScanScreen> {
   bool _busy = false;
   ScanOutcome? _outcome;
 
+  /// What this partner can win and the codes on offer, both from the data
+  /// layer. Null until it has answered.
+  ScanIntro? _intro;
+
   /// Set from the signed-in role on the first build: a wholesaler or
   /// distributor only ever checks authenticity.
   ScanMode? _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIntro());
+  }
 
   @override
   void dispose() {
@@ -36,10 +46,18 @@ class _ScanScreenState extends State<ScanScreen> {
     super.dispose();
   }
 
+  Future<void> _loadIntro() async {
+    final user = context.read<SessionController>().user;
+    if (user == null) return;
+    final loaded = await context.read<ScanRepository>().intro(user);
+    if (!mounted) return;
+    setState(() => _intro = loaded);
+  }
+
+  /// A wholesaler or distributor only ever checks authenticity, so that is
+  /// the tab they open on.
   ScanMode _modeFor(SignedInUser user) =>
-      _mode ??= MockScanRepository.prizeFor(user.role) == null
-      ? ScanMode.authenticity
-      : ScanMode.win;
+      _mode ??= user.role.earnsPrizes ? ScanMode.win : ScanMode.authenticity;
 
   /// Reads the code off the product with the camera, then checks it exactly
   /// as a sample code is checked.
@@ -81,7 +99,8 @@ class _ScanScreenState extends State<ScanScreen> {
 
     final outcome = _outcome;
     final mode = _modeFor(user);
-    final canWin = MockScanRepository.prizeFor(user.role) != null;
+    final canWin = user.role.earnsPrizes;
+    final prize = _intro?.prize;
 
     return Scaffold(
       appBar: DsAppBar(
@@ -120,11 +139,17 @@ class _ScanScreenState extends State<ScanScreen> {
                 ScanMode.authenticity =>
                   'Point the camera at the QR code on the box to check the '
                       'product is genuine. Checking does not use up the code.',
+                // The amount is Crown Solar's, so it is stated only once the
+                // data layer has said what it is. Until then the promise is
+                // made without a figure rather than with an invented one.
                 ScanMode.win =>
-                  'Point the camera at the QR code on the box. A genuine code '
-                      'you claim first pays '
-                      'PKR ${MockScanRepository.prizeFor(user.role)!.formatted} '
-                      'straight into your wallet.',
+                  prize == null
+                      ? 'Point the camera at the QR code on the box. A genuine '
+                            'code you claim first pays straight into your '
+                            'wallet.'
+                      : 'Point the camera at the QR code on the box. A genuine '
+                            'code you claim first pays PKR '
+                            '${prize.formatted} straight into your wallet.',
               },
             ),
             if (_busy) ...[
@@ -138,12 +163,12 @@ class _ScanScreenState extends State<ScanScreen> {
               title: 'Sample codes',
               // Only Scan to Win spends a code, so only it has anything to
               // put back.
-              actionLabel: mode == ScanMode.win ? 'Reset scans' : null,
-              onAction: mode == ScanMode.win ? _resetScans : null,
+              actionLabel: _canReset(mode) ? 'Reset scans' : null,
+              onAction: _canReset(mode) ? _resetScans : null,
             ),
             DsRowGroup(
               children: [
-                for (final sample in MockScanRepository.sampleCodes)
+                for (final sample in _intro?.samples ?? const <ScanSample>[])
                   DsSettingRow(
                     label: sample.code,
                     meta: mode == ScanMode.authenticity
@@ -156,7 +181,7 @@ class _ScanScreenState extends State<ScanScreen> {
                   ),
               ],
             ),
-            if (mode == ScanMode.win) ...[
+            if (_canReset(mode)) ...[
               const SizedBox(height: AppSpacing.sm),
               const DsCaption(
                 'Prototype only: Reset scans forgets the codes claimed in this '
@@ -174,7 +199,7 @@ class _ScanScreenState extends State<ScanScreen> {
               // Offered here because this is where a demonstration hits the
               // wall: the code has been claimed and there is no way back.
               onResetScans:
-                  outcome.mode == ScanMode.win &&
+                  _canReset(outcome.mode) &&
                       outcome.verdict == ScanVerdict.alreadyScanned
                   ? () {
                       _resetScans();
@@ -197,11 +222,14 @@ class _ScanScreenState extends State<ScanScreen> {
 
   /// Puts every code claimed in this session back, so a demonstration can run
   /// the winning journey more than once.
+  bool _canReset(ScanMode mode) =>
+      mode == ScanMode.win && context.read<ScanRepository>().canResetClaims;
+
   void _resetScans() {
     final scanner = context.read<ScanRepository>();
-    if (scanner is! MockScanRepository) return;
+    if (!scanner.canResetClaims) return;
 
-    scanner.reset();
+    scanner.resetClaims();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sample codes can be won again.')),
     );
@@ -252,6 +280,17 @@ class _Result extends StatelessWidget {
           message:
               'Crown Solar has blocked this batch. Do not install it — '
               'contact the team for a replacement.',
+        ),
+        // Not a verdict on the product: nobody reached one. Saying the code
+        // was fake because the phone had no signal would be a lie about
+        // somebody's stock.
+        ScanVerdict.unchecked => (
+          icon: LucideIcons.cloudOff,
+          tone: DsTone.warning,
+          title: 'Could not check this code',
+          message:
+              'Crown Solar could not be reached, so this product has not '
+              'been checked either way. Try again when you have a signal.',
         ),
       };
 

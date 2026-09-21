@@ -464,4 +464,209 @@ class PostgresPartnerDataStore implements PartnerDataStore {
         marketName: row['market_name'] as String?,
         cnicNumber: row['cnic_number'] as String?,
       );
+
+  // --- New profile requests ---
+
+  @override
+  Future<List<ExpectedPurchaseBand>> expectedPurchaseBands() async {
+    final result = await _client.pool.execute(
+      'SELECT id, label FROM expected_purchase_bands '
+      'WHERE active ORDER BY position, label',
+    );
+    return [
+      for (final record in result)
+        ExpectedPurchaseBand(
+          id: '${record.toColumnMap()['id']}',
+          label: record.toColumnMap()['label'] as String,
+        ),
+    ];
+  }
+
+  @override
+  Future<List<ProfileRequestRow>?> profileRequests(String mobileNumber) async {
+    final account = await findAccountByMobileNumber(mobileNumber);
+    if (account == null) return null;
+
+    // Named as the buying source AND still outstanding. A request already
+    // decided is gone from this list — it is not a history screen.
+    //
+    // `cnic_number` is not selected. The buying source is confirming that
+    // someone buys from them, not identifying them, so the identity details
+    // stay with CRM and never travel to this phone.
+    final result = await _client.pool.execute(
+      Sql.named('''
+        SELECT DISTINCT ON (r.id)
+               r.id, r.reference, r.mobile_number, r.full_name,
+               r.alternate_number, r.business_name, r.role,
+               r.business_address, r.submitted_at,
+               r.shop_latitude, r.shop_longitude,
+               m.name AS market_name
+          FROM registration_applications r
+          JOIN registration_buying_sources s
+            ON s.application_id = r.id
+           AND s.matched_account_id = @accountId::uuid
+          JOIN registration_approvals v
+            ON v.application_id = r.id
+           AND v.approver = 'buying_source'
+           AND v.state = 'outstanding'
+          LEFT JOIN markets m ON m.id = r.market_id
+         WHERE r.status = 'submitted'
+         ORDER BY r.id, r.submitted_at DESC
+      '''),
+      parameters: {'accountId': account.id},
+    );
+
+    final requests = <ProfileRequestRow>[];
+    for (final record in result) {
+      final row = record.toColumnMap();
+      requests.add(
+        _profileRequestFrom(
+          row,
+          otherBuyingSources: await _otherBuyingSources(
+            applicationId: '${row['id']}',
+            exceptAccountId: account.id,
+          ),
+          media: await _media('${row['id']}'),
+        ),
+      );
+    }
+    return requests..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+  }
+
+  /// Who else the applicant named, so the buying source can see they are not
+  /// the only one being asked.
+  Future<List<String>> _otherBuyingSources({
+    required String applicationId,
+    required String exceptAccountId,
+  }) async {
+    final result = await _client.pool.execute(
+      Sql.named('''
+        SELECT COALESCE(matched_name, mobile_number) AS name
+          FROM registration_buying_sources
+         WHERE application_id = @applicationId::uuid
+           AND (matched_account_id IS NULL
+                OR matched_account_id <> @exceptId::uuid)
+         ORDER BY position
+      '''),
+      parameters: {'applicationId': applicationId, 'exceptId': exceptAccountId},
+    );
+    return [for (final row in result) row.toColumnMap()['name'] as String];
+  }
+
+  /// What was submitted, minus the identity documents.
+  ///
+  /// The `NOT IN` is the whole rule, and it is in the query rather than in a
+  /// filter afterwards: a CNIC image is never read out of the database for
+  /// this screen at all.
+  Future<List<ProfileRequestMedia>> _media(String applicationId) async {
+    final result = await _client.pool.execute(
+      Sql.named('''
+        SELECT kind, slot, link_url
+          FROM registration_media
+         WHERE application_id = @applicationId::uuid
+           AND kind NOT IN ('cnic_front', 'cnic_back')
+         ORDER BY kind, slot
+      '''),
+      parameters: {'applicationId': applicationId},
+    );
+
+    return [
+      for (final record in result)
+        ProfileRequestMedia(
+          kind: record.toColumnMap()['kind'] as String,
+          slot: record.toColumnMap()['slot'] as String?,
+          linkUrl: record.toColumnMap()['link_url'] as String?,
+        ),
+    ];
+  }
+
+  @override
+  Future<ProfileRequestRefusal?> decideProfileRequest({
+    required String mobileNumber,
+    required String applicationId,
+    required bool approved,
+    String? expectedPurchaseBandId,
+    String? note,
+  }) async {
+    // Named here so the partner gets an answer they can act on; the
+    // constraints added in 008 are what make either mistake impossible.
+    if (approved && expectedPurchaseBandId == null) {
+      return ProfileRequestRefusal.expectationMissing;
+    }
+    if (!approved && (note == null || note.trim().isEmpty)) {
+      return ProfileRequestRefusal.reasonMissing;
+    }
+
+    final account = await findAccountByMobileNumber(mobileNumber);
+    if (account == null) return ProfileRequestRefusal.unknownAccount;
+
+    // The WHERE clause is the authorisation: it updates nothing unless this
+    // partner really was named as the applicant's buying source and the
+    // approval is still outstanding. Deciding twice, or deciding someone
+    // else's request, changes no rows.
+    final updated = await _client.pool.execute(
+      Sql.named('''
+        UPDATE registration_approvals v SET
+          state = @state,
+          decided_by_account_id = @accountId::uuid,
+          decided_by_name = @decidedBy,
+          decided_at = now(),
+          note = @note,
+          expected_purchase_band_id = @bandId::uuid
+         WHERE v.application_id = @applicationId::uuid
+           AND v.approver = 'buying_source'
+           AND v.state = 'outstanding'
+           AND EXISTS (
+             SELECT 1 FROM registration_buying_sources s
+              WHERE s.application_id = v.application_id
+                AND s.matched_account_id = @accountId::uuid
+           )
+        RETURNING v.id
+      '''),
+      parameters: {
+        'state': approved ? 'approved' : 'rejected',
+        'accountId': account.id,
+        'decidedBy': account.displayName ?? account.mobileNumber,
+        'note': note?.trim(),
+        'bandId': approved ? expectedPurchaseBandId : null,
+        'applicationId': applicationId,
+      },
+    );
+    if (updated.isEmpty) return ProfileRequestRefusal.notOutstanding;
+
+    // A rejection by the buying source ends the application: the other two
+    // approvers have nothing left to decide.
+    if (!approved) {
+      await _client.pool.execute(
+        Sql.named('''
+          UPDATE registration_applications
+             SET status = 'rejected', decided_at = now()
+           WHERE id = @applicationId::uuid AND status = 'submitted'
+        '''),
+        parameters: {'applicationId': applicationId},
+      );
+    }
+    return null;
+  }
+
+  ProfileRequestRow _profileRequestFrom(
+    Map<String, dynamic> row, {
+    List<String> otherBuyingSources = const [],
+    List<ProfileRequestMedia> media = const [],
+  }) => ProfileRequestRow(
+    applicationId: '${row['id']}',
+    reference: row['reference'] as String,
+    mobileNumber: row['mobile_number'] as String,
+    contactName: row['full_name'] as String,
+    businessName: row['business_name'] as String,
+    role: row['role'] as String,
+    businessAddress: row['business_address'] as String?,
+    marketName: row['market_name'] as String?,
+    submittedAt: row['submitted_at'] as DateTime,
+    alternateNumber: row['alternate_number'] as String?,
+    shopLatitude: row['shop_latitude']?.toString(),
+    shopLongitude: row['shop_longitude']?.toString(),
+    otherBuyingSources: otherBuyingSources,
+    media: media,
+  );
 }

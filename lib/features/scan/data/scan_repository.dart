@@ -19,6 +19,12 @@ enum ScanVerdict {
 
   /// Withdrawn — a batch Crown Solar has blocked.
   blocked,
+
+  /// Crown Solar could not be reached, so nothing was decided.
+  ///
+  /// Distinct from [notRecognised]: a code nobody could check has not been
+  /// judged, and saying it is fake would be a verdict nobody reached.
+  unchecked,
 }
 
 /// What the partner asked the scan to do.
@@ -96,14 +102,53 @@ class ScanOutcome {
   bool get hasPrize => prizeCredited != null;
 }
 
+/// One of the codes the scan screen lists, so the journey can be walked
+/// without a printed box.
+class ScanSample {
+  const ScanSample({required this.code, required this.meaning});
+
+  final String code;
+
+  /// What scanning it will do, e.g. 'Genuine · wins a prize'.
+  final String meaning;
+}
+
+/// What the scan screen needs before anything is scanned.
+class ScanIntro {
+  const ScanIntro({required this.prize, required this.samples});
+
+  /// What a winning code pays this partner, or null when their role cannot
+  /// win at all. Never guessed from the role in the screen: the amount is
+  /// Crown Solar's, and a figure the app made up would be a promise.
+  final Money? prize;
+
+  final List<ScanSample> samples;
+
+  static const empty = ScanIntro(prize: null, samples: []);
+}
+
 /// The scanner's data boundary. A real service would verify the code against
 /// Crown Solar's factory records; the mock below behaves the same way.
 abstract interface class ScanRepository {
+  /// What this partner can win, and the codes a demonstration can use.
+  Future<ScanIntro> intro(SignedInUser user);
+
   Future<ScanOutcome> check({
     required String code,
     required SignedInUser user,
     required ScanMode mode,
   });
+
+  /// Whether claims taken in this session can be put back.
+  ///
+  /// Only the in-memory repository can: against the database a claim is a
+  /// row, and a button that silently did nothing would be worse than no
+  /// button. See `db/README.md` for the SQL.
+  bool get canResetClaims;
+
+  /// Puts every claim taken in this session back. A no-op when
+  /// [canResetClaims] is false.
+  void resetClaims();
 }
 
 /// Deterministic scan results, so every verdict can be demonstrated.
@@ -162,13 +207,26 @@ class MockScanRepository implements ScanRepository {
     },
   };
 
+  @override
+  bool get canResetClaims => true;
+
+  @override
+  Future<ScanIntro> intro(SignedInUser user) async => ScanIntro(
+    prize: prizeFor(user.role),
+    samples: [
+      for (final sample in sampleCodes)
+        ScanSample(code: sample.code, meaning: sample.meaning),
+    ],
+  );
+
   /// Development support: forgets every claim taken in this session and
   /// restores the seeded ones, so the winning journey can be walked again
   /// without restarting the app.
   ///
   /// Prizes already paid are left alone — the wallet and the ledger keep what
   /// they were credited, because that money really was won.
-  void reset() {
+  @override
+  void resetClaims() {
     _claims
       ..clear()
       ..addAll(_seedClaims());

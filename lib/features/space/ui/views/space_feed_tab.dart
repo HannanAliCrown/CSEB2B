@@ -163,17 +163,27 @@ class PostCard extends StatelessWidget {
                 width: double.infinity,
                 color: context.palette.sunken,
                 alignment: Alignment.center,
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                // Filled edge to edge, as the promo slider fills its card. A
+                // photograph letterboxed inside a padded panel reads as a
+                // logo rather than as a picture of the thing being announced.
+                //
                 // A post from the database carries a URL; the bundled seed
                 // carries an asset path. A picture that will not load leaves
                 // the panel empty rather than showing a broken box.
                 child: post.image!.startsWith('http')
                     ? Image.network(
                         post.image!,
-                        fit: BoxFit.contain,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 150,
                         errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       )
-                    : Image.asset(post.image!, fit: BoxFit.contain),
+                    : Image.asset(
+                        post.image!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 150,
+                      ),
               ),
             ),
           ],

@@ -5,7 +5,10 @@ import 'package:provider/provider.dart';
 import '../../../../core/ui/ds.dart';
 import '../../../session/data/signed_in_user.dart';
 import '../../../session/ui/session_controller.dart';
+import '../../../wallet/data/cash_requests_service.dart';
 import '../../../wallet/data/wallet_repository.dart';
+import '../../../complaints/data/complaints_service.dart';
+import '../../../profile_requests/data/profile_requests_service.dart';
 import '../../data/dashboard_repository.dart';
 import '../widgets/home_widgets.dart';
 
@@ -19,12 +22,25 @@ class DashboardScreen extends StatefulWidget {
     required this.onSendCash,
     required this.onViewLedger,
     required this.onScan,
+    required this.onComplaints,
+    required this.onNotifications,
+    required this.onProfileRequests,
+    required this.onCashRequests,
     required this.onOpenModule,
   });
 
   final VoidCallback onSendCash;
   final VoidCallback onViewLedger;
   final VoidCallback onScan;
+  final VoidCallback onComplaints;
+  final VoidCallback onNotifications;
+
+  /// Opens the buying source's inbox of registrations to verify. Awaited so
+  /// the badge is recounted when the partner comes back.
+  final Future<void> Function() onProfileRequests;
+
+  /// Opens the inbox of transfers waiting on this partner.
+  final Future<void> Function() onCashRequests;
 
   /// Opens one of the "Everything else" tiles by its label.
   final ValueChanged<String> onOpenModule;
@@ -36,6 +52,17 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   Dashboard? _dashboard;
   bool _balanceHidden = true;
+
+  /// Whether the bell shows its dot. Counted from the partner's own
+  /// notifications rather than assumed, so a cleared list clears the dot.
+  int _unread = 0;
+
+  /// Registrations waiting on this partner to verify them. Zero for an
+  /// installer, who nobody buys from.
+  int _profileRequests = 0;
+
+  /// Cash already out of someone's wallet, waiting on this partner.
+  int _cashRequests = 0;
 
   @override
   void initState() {
@@ -57,26 +84,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _load() async {
     final user = context.read<SessionController>().user;
     if (user == null) return;
-    final loaded = await context.read<DashboardRepository>().load(user);
+    // Both are taken before the first await: reading a provider off a
+    // context afterwards reaches through a widget that may be gone.
+    final repository = context.read<DashboardRepository>();
+    final complaints = context.read<ComplaintsService>();
+    final requests = context.read<ProfileRequestsService>();
+    final cash = context.read<CashRequestsService>();
+
+    final loaded = await repository.load(user);
+    final notifications = await complaints.notifications(user.mobileNumber);
+    // Only the roles that sell on have anyone to verify.
+    final waiting = user.role == PartnerRole.installer
+        ? 0
+        : await requests.outstandingCount(user.mobileNumber);
+    final cashWaiting = user.role == PartnerRole.installer
+        ? 0
+        : await cash.waitingCount(user.mobileNumber);
     if (!mounted) return;
-    setState(() => _dashboard = loaded);
+    setState(() {
+      _dashboard = loaded;
+      _unread = notifications?.unread ?? 0;
+      _profileRequests = waiting;
+      _cashRequests = cashWaiting;
+    });
   }
 
-  /// The modules a role actually has. An installer has no cash requests to
-  /// approve and no points, so those tiles are absent rather than dimmed.
+  /// The modules a role actually has (board 03 · A1–A4).
+  ///
+  /// An installer has nobody buying from them, so they have no cash requests
+  /// to approve and no profiles to verify — those tiles are absent rather
+  /// than dimmed. The trade roles sell on, so they get both.
   List<HomeTile> _tilesFor(PartnerRole role) {
-    final trade = role != PartnerRole.installer;
+    final sellsOn = role != PartnerRole.installer;
     return [
       HomeTile(
         label: 'Send Cash',
         icon: LucideIcons.banknoteArrowUp,
         onTap: widget.onSendCash,
       ),
-      if (trade)
+      if (sellsOn)
         HomeTile(
           label: 'Cash Request',
           icon: LucideIcons.handCoins,
-          onTap: () => widget.onOpenModule('Cash Request'),
+          // Counted, not guessed: no badge at all when nothing is waiting.
+          badge: _cashRequests == 0 ? null : _cashRequests,
+          onTap: () async {
+            await widget.onCashRequests();
+            await _load();
+          },
         ),
       HomeTile(
         label: 'View Ledger',
@@ -88,10 +143,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         icon: LucideIcons.store,
         onTap: () => widget.onOpenModule('Shop Branding'),
       ),
+      if (sellsOn)
+        HomeTile(
+          label: 'New Profile',
+          icon: LucideIcons.userPlus,
+          // Counted, not guessed: no badge at all when nothing is waiting.
+          badge: _profileRequests == 0 ? null : _profileRequests,
+          onTap: () async {
+            await widget.onProfileRequests();
+            await _load();
+          },
+        ),
       HomeTile(
         label: 'Complaints',
         icon: LucideIcons.lifeBuoy,
-        onTap: () => widget.onOpenModule('Complaints'),
+        onTap: widget.onComplaints,
       ),
     ];
   }
@@ -107,7 +173,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       bottom: false,
       child: Column(
         children: [
-          HomeHeader(businessName: user.businessName, role: user.role.label),
+          HomeHeader(
+            businessName: user.businessName,
+            role: user.role.label,
+            hasUnread: _unread > 0,
+            onNotifications: () async {
+              widget.onNotifications();
+              // Reading a notification clears its dot, so the badge is
+              // recounted when the partner comes back.
+              await _load();
+            },
+          ),
           Expanded(
             child: dashboard == null
                 ? const Center(child: CircularProgressIndicator())

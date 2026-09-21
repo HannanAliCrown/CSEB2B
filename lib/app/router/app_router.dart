@@ -20,10 +20,26 @@ import 'package:cse_b2b/features/home/data/dashboard_repository.dart';
 import 'package:cse_b2b/features/home/data/http_dashboard_repository.dart';
 import 'package:cse_b2b/features/scan/data/scan_repository.dart';
 import 'package:cse_b2b/features/chat/data/chat_repository.dart';
+import 'package:cse_b2b/features/complaints/data/complaints_service.dart';
+import 'package:cse_b2b/features/complaints/ui/views/complaint_detail_screen.dart';
+import 'package:cse_b2b/features/complaints/ui/views/complaints_screen.dart';
+import 'package:cse_b2b/features/complaints/ui/views/new_complaint_screen.dart';
+import 'package:cse_b2b/features/complaints/ui/views/notifications_screen.dart';
 import 'package:cse_b2b/features/chat/data/http_chat_repository.dart';
 import 'package:cse_b2b/features/chat/ui/views/conversation_screen.dart';
 import 'package:cse_b2b/features/chat/ui/views/new_conversation_screen.dart';
+import 'package:cse_b2b/features/inaam_baazar/data/inaam_service.dart';
+import 'package:cse_b2b/features/points/data/points_service.dart';
+import 'package:cse_b2b/features/points/ui/views/points_ledger_screen.dart';
+import 'package:cse_b2b/features/points/ui/views/send_points_screen.dart';
+import 'package:cse_b2b/features/points/ui/views/targets_screen.dart';
 import 'package:cse_b2b/features/profile/data/contacts_repository.dart';
+import 'package:cse_b2b/features/profile_requests/data/profile_requests_service.dart';
+import 'package:cse_b2b/features/profile_requests/ui/views/profile_requests_screen.dart';
+import 'package:cse_b2b/features/profile/data/profile_settings_service.dart';
+import 'package:cse_b2b/features/profile/ui/views/app_security_page.dart';
+import 'package:cse_b2b/features/profile/ui/views/pin_gate.dart';
+import 'package:cse_b2b/features/profile/ui/views/settings_pages.dart';
 import 'package:cse_b2b/features/profile/ui/views/my_qr_code_screen.dart';
 import 'package:cse_b2b/features/profile/ui/views/sync_contacts_screen.dart';
 import 'package:cse_b2b/features/scan/ui/views/scan_screen.dart';
@@ -33,7 +49,11 @@ import 'package:cse_b2b/features/session/ui/session_controller.dart';
 import 'package:cse_b2b/features/space/data/http_space_repository.dart';
 import 'package:cse_b2b/features/space/data/space_repository.dart';
 import 'package:cse_b2b/features/space/ui/views/post_detail_screen.dart';
+import 'package:cse_b2b/features/wallet/data/cash_requests_service.dart';
+import 'package:cse_b2b/features/wallet/data/http_wallet_repository.dart';
+import 'package:cse_b2b/features/wallet/ui/views/cash_requests_screen.dart';
 import 'package:cse_b2b/features/wallet/data/wallet_repository.dart';
+import 'package:cse_b2b/features/scan/data/http_scan_repository.dart';
 import 'package:cse_b2b/features/wallet/ui/ledger_view_model.dart';
 import 'package:cse_b2b/features/wallet/ui/wallet_view_model.dart';
 import 'package:cse_b2b/features/wallet/ui/views/ledger_screen.dart';
@@ -96,6 +116,26 @@ abstract final class AppRoutes {
   /// Scan QR: product authenticity, and any prize a scan wins.
   static const scan = '/scan';
 
+  /// Complaints: the ticket list, the wizard, and one ticket. A ticket's
+  /// path carries its reference, so a notification can link straight to it.
+  static const complaints = '/complaints';
+  static const newComplaint = '/complaints/new';
+  static String complaint(String reference) => '/complaints/$reference';
+
+  /// The notification centre, which the bell on Home opens.
+  static const notifications = '/notifications';
+
+  /// Registrations naming this partner as their buying source.
+  static const profileRequests = '/profile-requests';
+
+  /// Transfers waiting on this partner to approve or reject.
+  static const cashRequests = '/wallet/cash-requests';
+
+  /// Points: sending, the scheme's targets, and the full points ledger.
+  static const sendPoints = '/points/send';
+  static const targets = '/points/targets';
+  static const pointsLedger = '/points/ledger';
+
   /// Where a submitted registration waits for its three approvals.
   static const approval = '/approval';
 
@@ -105,6 +145,13 @@ abstract final class AppRoutes {
 
   /// One Space post, its comments and the replies under them.
   static const post = '/space/post';
+
+  /// The settings pages under Profile.
+  static const language = '/profile/language';
+  static const theme = '/profile/theme';
+  static const appSecurity = '/profile/security';
+  static const callSupport = '/profile/support';
+  static const aboutApp = '/profile/about';
 
   /// The partner's own QR code, and the contact sync behind it.
   static const myQrCode = '/profile/qr';
@@ -179,15 +226,48 @@ GoRouter createAppRouter({
           : const MockSessionService(),
     ),
   );
-  final wallet = MockWalletRepository();
+  final wallet = _serverBacked
+      ? HttpWalletRepository(baseUrl: apiBaseUrl)
+      : MockWalletRepository();
   final dashboard = _serverBacked
       ? HttpDashboardRepository(baseUrl: apiBaseUrl)
       : MockDashboardRepository(wallet: wallet);
-  final scanner = MockScanRepository(wallet: wallet);
+  final scanner = _serverBacked
+      ? HttpScanRepository(baseUrl: apiBaseUrl, wallet: wallet)
+      : MockScanRepository(wallet: wallet as MockWalletRepository);
   final contacts = DeviceContactsRepository(preferences: prefs);
   final chat = _serverBacked
       ? HttpChatRepository(baseUrl: apiBaseUrl)
       : MockChatRepository();
+  // Profile settings are database-backed only: a setting that is forgotten
+  // on restart is worse than one that plainly fails.
+  final profileSettings = ProfileSettingsService(baseUrl: apiBaseUrl);
+  final pinLock = PinLock();
+
+  // Complaints and notifications are database-backed only, for the same
+  // reason the profile settings are: a ticket that exists until the app
+  // restarts is worse than one that plainly fails to be raised.
+  final complaints = ComplaintsService(baseUrl: apiBaseUrl);
+
+  // The buying source's side of a registration. Database-backed only: a
+  // verdict on someone else's livelihood that is forgotten on restart is
+  // worse than one that plainly fails to be recorded.
+  final profileRequests = ProfileRequestsService(baseUrl: apiBaseUrl);
+
+  // Points are database-backed only. They arrive at once and cannot be
+  // recalled, so a transfer remembered only until the app restarts would be
+  // worse than one that plainly fails.
+  final points = PointsService(baseUrl: apiBaseUrl);
+
+  // The receiver's side of a transfer. Database-backed only: a verdict that
+  // moves someone else's money and is forgotten on restart is worse than
+  // one that plainly fails.
+  final cashRequests = CashRequestsService(baseUrl: apiBaseUrl);
+
+  // Inaam prizes are money. Database-backed only: a spin whose winnings are
+  // forgotten on restart would be worse than one that plainly fails.
+  final inaam = InaamService(baseUrl: apiBaseUrl);
+
   final space = _serverBacked
       ? HttpSpaceRepository(baseUrl: apiBaseUrl)
       : MockSpaceRepository();
@@ -203,6 +283,13 @@ GoRouter createAppRouter({
       Provider<ContactsRepository>.value(value: contacts),
       Provider<ChatRepository>.value(value: chat),
       Provider<SpaceRepository>.value(value: space),
+      Provider<ProfileSettingsService>.value(value: profileSettings),
+      Provider<ProfileRequestsService>.value(value: profileRequests),
+      Provider<PointsService>.value(value: points),
+      Provider<CashRequestsService>.value(value: cashRequests),
+      Provider<InaamService>.value(value: inaam),
+      Provider<ComplaintsService>.value(value: complaints),
+      ChangeNotifierProvider<PinLock>.value(value: pinLock),
     ],
     child: child,
   );
@@ -346,20 +433,53 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: AppRoutes.home,
+        // The PIN gate stands in front of the signed-in app, because App
+        // Security promises the PIN is asked for the next time it opens.
         builder: (context, state) => signedIn(
-          AppShell(
-            onSendCash: () => context.push(AppRoutes.sendCash),
-            onViewLedger: () => context.push(AppRoutes.ledger),
-            onScan: () => context.push(AppRoutes.scan),
-            onSignOut: () => context.go(AppRoutes.login),
-            onShowQrCode: () => context.push(AppRoutes.myQrCode),
-            onSyncContacts: () => context.push(AppRoutes.syncContacts),
-            onNewConversation: () => context.push(AppRoutes.newConversation),
-            onOpenThread: (party) =>
-                context.push(AppRoutes.conversation, extra: party),
-            onOpenPost: (post) => context.push(AppRoutes.post, extra: post),
+          PinGate(
+            child: AppShell(
+              onSendCash: () => context.push(AppRoutes.sendCash),
+              onViewLedger: () => context.push(AppRoutes.ledger),
+              onScan: () => context.push(AppRoutes.scan),
+              onComplaints: () => context.push(AppRoutes.complaints),
+              onNotifications: () => context.push(AppRoutes.notifications),
+              onProfileRequests: () =>
+                  context.push<void>(AppRoutes.profileRequests),
+              onCashRequests: () => context.push<void>(AppRoutes.cashRequests),
+              onSendPoints: () => context.push<void>(AppRoutes.sendPoints),
+              onViewTargets: () => context.push<void>(AppRoutes.targets),
+              onPointsLedger: () => context.push<void>(AppRoutes.pointsLedger),
+              onSignOut: () => context.go(AppRoutes.login),
+              onShowQrCode: () => context.push(AppRoutes.myQrCode),
+              onSyncContacts: () => context.push(AppRoutes.syncContacts),
+              onNewConversation: () => context.push(AppRoutes.newConversation),
+              onOpenThread: (party) =>
+                  context.push(AppRoutes.conversation, extra: party),
+              onOpenPost: (post) => context.push(AppRoutes.post, extra: post),
+              onOpenSetting: (route) => context.push<void>(route),
+            ),
           ),
         ),
+      ),
+      GoRoute(
+        path: AppRoutes.language,
+        builder: (context, state) => signedIn(const LanguagePage()),
+      ),
+      GoRoute(
+        path: AppRoutes.theme,
+        builder: (context, state) => signedIn(const ThemePage()),
+      ),
+      GoRoute(
+        path: AppRoutes.appSecurity,
+        builder: (context, state) => signedIn(const AppSecurityPage()),
+      ),
+      GoRoute(
+        path: AppRoutes.callSupport,
+        builder: (context, state) => signedIn(const CallSupportPage()),
+      ),
+      GoRoute(
+        path: AppRoutes.aboutApp,
+        builder: (context, state) => signedIn(const AboutAppPage()),
       ),
       GoRoute(
         path: AppRoutes.sendCash,
@@ -382,6 +502,81 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.scan,
         builder: (context, state) => signedIn(const ScanScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.complaints,
+        builder: (context, state) => signedIn(
+          ComplaintsScreen(
+            onNewComplaint: () => context.push<String>(AppRoutes.newComplaint),
+            onOpenComplaint: (reference) =>
+                context.push<void>(AppRoutes.complaint(reference)),
+          ),
+        ),
+        routes: [
+          // Declared before ':reference', which would otherwise match "new".
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => signedIn(const NewComplaintScreen()),
+          ),
+          GoRoute(
+            path: ':reference',
+            builder: (context, state) => signedIn(
+              ComplaintDetailScreen(
+                reference: state.pathParameters['reference']!,
+                onMessageCrm: () => context.push(
+                  AppRoutes.conversation,
+                  extra: ChatParty.department(Department.crm),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: AppRoutes.sendPoints,
+        builder: (context, state) => signedIn(const SendPointsScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.targets,
+        builder: (context, state) => signedIn(
+          TargetsScreen(
+            // A scheme is signed on paper, so the only thing the app can
+            // offer is the conversation that starts it.
+            onChatWithTeam: () => context.push(
+              AppRoutes.conversation,
+              extra: ChatParty.department(Department.crm),
+            ),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.pointsLedger,
+        builder: (context, state) => signedIn(const PointsLedgerScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.cashRequests,
+        builder: (context, state) => signedIn(const CashRequestsScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.profileRequests,
+        builder: (context, state) => signedIn(const ProfileRequestsScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.notifications,
+        builder: (context, state) => signedIn(
+          NotificationsScreen(
+            // A notification only navigates to a screen that exists. The
+            // rest say so rather than going nowhere on a tap.
+            onOpenDestination: (route) async {
+              if (route != AppRoutes.ledger &&
+                  !route.startsWith('${AppRoutes.complaints}/')) {
+                return false;
+              }
+              await context.push<void>(route);
+              return true;
+            },
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.newConversation,

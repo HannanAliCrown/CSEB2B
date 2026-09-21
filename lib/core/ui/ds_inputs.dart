@@ -638,21 +638,27 @@ class DsKeypad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'back'];
-    return Column(
-      children: [
-        for (var row = 0; row < 4; row++)
-          Padding(
-            padding: EdgeInsets.only(bottom: row == 3 ? 0 : 14),
-            child: Row(
-              children: [
-                for (var col = 0; col < 3; col++) ...[
-                  Expanded(child: _key(context, keys[row * 3 + col])),
-                  if (col != 2) const SizedBox(width: 14),
+    // Always left to right, whatever the app's language is. A numeric keypad
+    // reads the same way everywhere — the phone's own dialler does not
+    // mirror in Urdu either, and a mirrored one puts 1 where 3 should be.
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Column(
+        children: [
+          for (var row = 0; row < 4; row++)
+            Padding(
+              padding: EdgeInsets.only(bottom: row == 3 ? 0 : 14),
+              child: Row(
+                children: [
+                  for (var col = 0; col < 3; col++) ...[
+                    Expanded(child: _key(context, keys[row * 3 + col])),
+                    if (col != 2) const SizedBox(width: 14),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 

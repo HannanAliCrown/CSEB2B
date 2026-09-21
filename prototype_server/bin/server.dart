@@ -4,7 +4,13 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import 'package:prototype_server/data/postgres_auth_data_store.dart';
+import 'package:prototype_server/data/postgres_complaints_data_store.dart';
+import 'package:prototype_server/data/postgres_inaam_data_store.dart';
 import 'package:prototype_server/data/postgres_partner_data_store.dart';
+import 'package:prototype_server/data/postgres_points_data_store.dart';
+import 'package:prototype_server/data/postgres_profile_data_store.dart';
+import 'package:prototype_server/data/postgres_scan_data_store.dart';
+import 'package:prototype_server/data/postgres_wallet_data_store.dart';
 import 'package:prototype_server/data/postgres_social_data_store.dart';
 import 'package:prototype_server/db/postgres_client.dart';
 import 'package:prototype_server/router.dart';
@@ -14,7 +20,23 @@ Future<void> main() async {
   final store = PostgresAuthDataStore(client);
   final partners = PostgresPartnerDataStore(client);
   final social = PostgresSocialDataStore(client);
-  final router = buildRouter(store, partners: partners, social: social);
+  final profile = PostgresProfileDataStore(client);
+  final complaints = PostgresComplaintsDataStore(client);
+  final wallet = PostgresWalletDataStore(client);
+  final scan = PostgresScanDataStore(client);
+  final points = PostgresPointsDataStore(client);
+  final inaam = PostgresInaamDataStore(client);
+  final router = buildRouter(
+    store,
+    partners: partners,
+    social: social,
+    profile: profile,
+    complaints: complaints,
+    wallet: wallet,
+    scan: scan,
+    points: points,
+    inaam: inaam,
+  );
 
   final pipeline = const Pipeline()
       .addMiddleware(logRequests())

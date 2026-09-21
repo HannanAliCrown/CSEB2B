@@ -6,7 +6,10 @@ import 'package:provider/provider.dart';
 import '../../../../core/ui/ds.dart';
 import '../../../session/data/signed_in_user.dart';
 import '../../../session/ui/session_controller.dart';
+import '../../../../app/router/app_router.dart';
 import '../../data/contacts_repository.dart';
+import '../../data/profile_settings_service.dart';
+import '../app_settings_controller.dart';
 
 /// Board 11 · 1 — Profile: the facts that came from registration, then the
 /// settings that belong to this phone.
@@ -16,11 +19,16 @@ class ProfileTab extends StatefulWidget {
     required this.onShowQrCode,
     required this.onSyncContacts,
     required this.onSignOut,
+    required this.onOpenSetting,
   });
 
   final VoidCallback onShowQrCode;
   final VoidCallback onSyncContacts;
   final VoidCallback onSignOut;
+
+  /// Opens one of the settings pages by its route path, completing when
+  /// that page closes.
+  final Future<void> Function(String route) onOpenSetting;
 
   @override
   State<ProfileTab> createState() => _ProfileTabState();
@@ -30,6 +38,11 @@ class _ProfileTabState extends State<ProfileTab> {
   int _syncedCount = 0;
   DateTime? _syncedAt;
   String _version = '';
+
+  /// The partner's saved settings, so the rows say what is actually set
+  /// rather than a guess.
+  ProfileSettings? _settings;
+  String? _supportNumber;
 
   @override
   void initState() {
@@ -48,6 +61,24 @@ class _ProfileTabState extends State<ProfileTab> {
       _syncedAt = at;
       _version = info.version;
     });
+
+    final user = context.read<SessionController>().user;
+    if (user == null) return;
+    final service = context.read<ProfileSettingsService>();
+    final settings = await service.read(user.mobileNumber);
+    final contacts = await service.supportContacts(user.mobileNumber);
+    if (!mounted) return;
+    setState(() {
+      _settings = settings;
+      _supportNumber = contacts.isEmpty ? null : contacts.first.phoneNumber;
+    });
+  }
+
+  /// Opens a settings page and re-reads when it closes: Language and App
+  /// Security both change what these rows should say.
+  Future<void> _openSetting(String route) async {
+    await widget.onOpenSetting(route);
+    if (mounted) await _load();
   }
 
   /// "AS" from "Adnan Solar Works".
@@ -150,25 +181,54 @@ class _ProfileTabState extends State<ProfileTab> {
                   _SettingsRow(
                     icon: LucideIcons.lockKeyhole,
                     label: 'App Security',
-                    meta: 'Not built yet',
-                    onTap: () => _notBuilt('App Security'),
+                    // A PIN that exists but is switched off is not "no PIN":
+                    // turning it back on will not ask for a new one.
+                    meta: _settings == null
+                        ? ''
+                        : _settings!.pinEnabled
+                        ? 'App PIN is on'
+                        : _settings!.pinSet
+                        ? 'PIN is off'
+                        : 'No PIN set',
+                    onTap: () => _openSetting(AppRoutes.appSecurity),
                   ),
                   _SettingsRow(
                     icon: LucideIcons.languages,
                     label: 'Language',
-                    meta: 'Not built yet',
-                    onTap: () => _notBuilt('Language'),
+                    meta: _settings?.language == null
+                        ? 'English'
+                        : '${_settings!.language!.label}'
+                              '${_settings!.languageRemembered == true ? ' · remembered' : ''}',
+                    onTap: () => _openSetting(AppRoutes.language),
                   ),
                   _SettingsRow(
                     icon: LucideIcons.palette,
                     label: 'Colour Theme',
-                    meta: 'Light',
-                    onTap: () => _notBuilt('Colour Theme'),
+                    meta: switch (context
+                        .watch<AppSettingsController>()
+                        .themeMode) {
+                      ThemeMode.light => 'Light',
+                      ThemeMode.dark => 'Dark',
+                      ThemeMode.system => 'Follows your phone',
+                    },
+                    onTap: () => _openSetting(AppRoutes.theme),
+                  ),
+                  _SettingsRow(
+                    icon: LucideIcons.phone,
+                    label: 'Call Support',
+                    // A phone number is left-to-right whatever the app's
+                    // language is: without the marks, Urdu reorders the
+                    // groups and 042 111 276 963 reads back to front.
+                    meta: _supportNumber == null
+                        ? ''
+                        : ltrText(_supportNumber!),
+                    onTap: () => _openSetting(AppRoutes.callSupport),
                   ),
                   _SettingsRow(
                     icon: LucideIcons.info,
                     label: 'About App',
-                    meta: _version.isEmpty ? '' : 'Version $_version',
+                    meta: _version.isEmpty ? '' : ltrText('Version $_version'),
+                    onTap: () => _openSetting(AppRoutes.aboutApp),
                   ),
                 ],
               ),
@@ -257,10 +317,6 @@ class _ProfileTabState extends State<ProfileTab> {
 
     if (confirmed == true) widget.onSignOut();
   }
-
-  void _notBuilt(String what) =>
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$what is not built yet.')));
 
   String _day(DateTime when) {
     final gap = DateTime.now().difference(when);

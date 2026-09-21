@@ -366,7 +366,7 @@ void main() {
         user: _installer,
         mode: ScanMode.win,
       );
-      harness.scanner.reset();
+      harness.scanner.resetClaims();
 
       final again = await harness.scanner.check(
         code: 'CS-INV-8841',
@@ -388,14 +388,14 @@ void main() {
       );
       final won = await harness.wallet.balance(_installer);
 
-      harness.scanner.reset();
+      harness.scanner.resetClaims();
 
       expect(await harness.wallet.balance(_installer), won);
     });
 
     test('the seeded claims come back', () async {
       final harness = _build();
-      harness.scanner.reset();
+      harness.scanner.resetClaims();
 
       final outcome = await harness.scanner.check(
         code: 'CS-INV-0001',

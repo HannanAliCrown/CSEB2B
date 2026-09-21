@@ -10,14 +10,36 @@ import '../../../home/ui/models/home_demo_data.dart';
 /// on each, and a pointer at the top. Nothing about weighting or odds is
 /// exposed, because the user cannot influence them.
 class SpinWheel extends StatelessWidget {
-  const SpinWheel({super.key, this.size = 260});
+  const SpinWheel({super.key, this.size = 260, this.values});
 
   final double size;
 
-  static const _values = ['50', '50', '50', '500', '50', '50', '50', '50,000'];
+  /// The segment labels. Null keeps the design's own eight, so the boards are
+  /// unchanged; the live screen passes what Crown Solar configured.
+  final List<String>? values;
+
+  static const _defaults = [
+    '50',
+    '50',
+    '50',
+    '500',
+    '50',
+    '50',
+    '50',
+    '50,000',
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final given = values;
+    final labels = (given == null || given.isEmpty) ? _defaults : given;
+
+    // The biggest prize on the wheel is the one in Crown red, whatever it
+    // happens to be — the colour follows the configuration, not a constant.
+    final most = (List<String>.of(
+      labels,
+    )..sort((a, b) => a.length - b.length)).last;
+
     return SizedBox(
       width: size,
       height: size,
@@ -32,24 +54,24 @@ class SpinWheel extends StatelessWidget {
             ),
             child: CustomPaint(
               painter: _WheelPainter(
-                segments: _values.length,
+                segments: labels.length,
                 line: context.colors.outline,
                 highlight: context.palette.accentSoft,
               ),
               child: Stack(
                 children: [
-                  for (var i = 0; i < _values.length; i++)
+                  for (var i = 0; i < labels.length; i++)
                     Align(
                       alignment: Alignment(
-                        0.62 * _unit(i, _values.length).dx,
-                        0.62 * _unit(i, _values.length).dy,
+                        0.62 * _unit(i, labels.length).dx,
+                        0.62 * _unit(i, labels.length).dy,
                       ),
                       child: Text(
-                        _values[i],
+                        labels[i],
                         style: TextStyle(
-                          fontSize: _values[i].length > 3 ? 13 : 15,
+                          fontSize: labels[i].length > 3 ? 13 : 15,
                           fontWeight: FontWeight.w600,
-                          color: _values[i] == '50,000'
+                          color: labels[i] == most
                               ? context.palette.crownRed
                               : context.colors.onSurface,
                         ),
