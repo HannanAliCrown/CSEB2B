@@ -252,6 +252,7 @@ class RewardProgram {
     this.awardTierName,
     this.awardBonusPercent,
     this.awardAppliesUntil,
+    this.awardEarnedOn,
   });
 
   final String? label;
@@ -265,6 +266,10 @@ class RewardProgram {
   final String? awardTierName;
   final int? awardBonusPercent;
   final DateTime? awardAppliesUntil;
+
+  /// The month that earned it. A tier reached in June pays through July, so
+  /// this is not the month the bonus runs in.
+  final DateTime? awardEarnedOn;
 
   bool get running => label != null;
   bool get hasAward => awardTierName != null;
@@ -319,6 +324,9 @@ class RewardProgram {
     awardAppliesUntil: json['awardAppliesUntil'] == null
         ? null
         : DateTime.parse(json['awardAppliesUntil'] as String).toLocal(),
+    awardEarnedOn: json['awardEarnedOn'] == null
+        ? null
+        : DateTime.parse(json['awardEarnedOn'] as String).toLocal(),
   );
 }
 
@@ -462,6 +470,9 @@ const _months = [
 /// "31 Jul".
 String formatInaamDate(DateTime at) => '${at.day} ${_months[at.month - 1]}';
 
+/// "July" — the month on its own, as the Reward Program card titles it.
+String formatInaamMonth(DateTime at) => _monthNames[at.month - 1];
+
 /// "Today, 5:31 PM", then "07 Sep, 7:14 PM".
 String formatSpinWhen(DateTime at) {
   final now = DateTime.now();
@@ -480,3 +491,18 @@ String formatSpinWhen(DateTime at) {
   return '${at.day.toString().padLeft(2, '0')} '
       '${_months[at.month - 1]}, $time';
 }
+
+const _monthNames = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];

@@ -202,6 +202,7 @@ class RewardProgramRow {
     this.awardTierName,
     this.awardBonusPercent,
     this.awardAppliesUntil,
+    this.awardEarnedOn,
   });
 
   /// The programme running now. Null when Crown Solar has not created one,
@@ -222,6 +223,10 @@ class RewardProgramRow {
   final int? awardBonusPercent;
   final DateTime? awardAppliesUntil;
 
+  /// The month that earned the award — the one the card is titled with. Not
+  /// the month it runs in: a tier reached in June pays through July.
+  final DateTime? awardEarnedOn;
+
   Map<String, Object?> toJson() => {
     'label': label,
     'startsOn': startsOn?.toUtc().toIso8601String(),
@@ -231,6 +236,7 @@ class RewardProgramRow {
     'awardTierName': awardTierName,
     'awardBonusPercent': awardBonusPercent,
     'awardAppliesUntil': awardAppliesUntil?.toUtc().toIso8601String(),
+    'awardEarnedOn': awardEarnedOn?.toUtc().toIso8601String(),
   };
 }
 

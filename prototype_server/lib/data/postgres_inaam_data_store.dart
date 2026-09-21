@@ -431,9 +431,12 @@ class PostgresInaamDataStore implements InaamDataStore {
     // What last month earned, and is paying out now.
     final award = await _client.pool.execute(
       Sql.named('''
-        SELECT t.name, w.bonus_percent, w.applies_until
+        SELECT t.name, w.bonus_percent, w.applies_until,
+               -- The month that earned it, which the card is titled with.
+               earned.starts_on AS earned_on
           FROM reward_program_awards w
           JOIN reward_program_tiers t ON t.id = w.tier_id
+          JOIN reward_programs earned ON earned.id = w.program_id
          WHERE w.account_id = @accountId::uuid
            AND current_date BETWEEN w.applies_from AND w.applies_until
          ORDER BY w.awarded_at DESC
@@ -450,6 +453,7 @@ class PostgresInaamDataStore implements InaamDataStore {
         awardTierName: won?['name'] as String?,
         awardBonusPercent: won?['bonus_percent'] as int?,
         awardAppliesUntil: won?['applies_until'] as DateTime?,
+        awardEarnedOn: won?['earned_on'] as DateTime?,
       );
     }
 
@@ -498,6 +502,7 @@ class PostgresInaamDataStore implements InaamDataStore {
       awardTierName: won?['name'] as String?,
       awardBonusPercent: won?['bonus_percent'] as int?,
       awardAppliesUntil: won?['applies_until'] as DateTime?,
+      awardEarnedOn: won?['earned_on'] as DateTime?,
     );
   }
 

@@ -384,7 +384,12 @@ class _InaamTabState extends State<InaamTab> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Active Rewards',
+                      // The month named here is the one that earned the
+                      // bonus, not the one it runs in.
+                      program.awardEarnedOn == null
+                          ? 'Active Rewards'
+                          : 'Active Rewards · '
+                                '${formatInaamMonth(program.awardEarnedOn!)}',
                       style: context.texts.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -414,12 +419,6 @@ class _InaamTabState extends State<InaamTab> {
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: AppSpacing.stepMd),
-              DsBody(
-                'Every scan of a scheme product pays '
-                '${program.awardBonusPercent}% more while this runs.',
-                size: 13,
               ),
             ],
           ),
@@ -453,7 +452,9 @@ class _InaamTabState extends State<InaamTab> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              DsCaption('Target · ${program.label} · in progress'),
+              DsCaption(
+                'Target · ${formatInaamMonth(program.startsOn!)} · in progress',
+              ),
               const SizedBox(height: AppSpacing.stepMd),
               Row(
                 children: [
