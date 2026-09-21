@@ -241,13 +241,17 @@ GoRouter createAppRouter({
       : MockChatRepository();
   // Profile settings are database-backed only: a setting that is forgotten
   // on restart is worse than one that plainly fails.
-  final profileSettings = ProfileSettingsService(baseUrl: apiBaseUrl);
+  final profileSettings = _serverBacked
+      ? ProfileSettingsService(baseUrl: apiBaseUrl)
+      : MockProfileSettingsService();
   final pinLock = PinLock();
 
-  // Complaints and notifications are database-backed only, for the same
-  // reason the profile settings are: a ticket that exists until the app
-  // restarts is worse than one that plainly fails to be raised.
-  final complaints = ComplaintsService(baseUrl: apiBaseUrl);
+  // Complaints keep the same service contract in both modes. The mock mode
+  // carries the seeded board-08 journey in memory, so the phone build needs
+  // no server or database to render and exercise it.
+  final complaints = _serverBacked
+      ? ComplaintsService(baseUrl: apiBaseUrl)
+      : ComplaintsService.mock();
 
   // The buying source's side of a registration. Database-backed only: a
   // verdict on someone else's livelihood that is forgotten on restart is

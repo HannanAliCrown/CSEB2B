@@ -261,6 +261,89 @@ class ProfileSettingsService {
   }
 }
 
+class MockProfileSettingsService extends ProfileSettingsService {
+  MockProfileSettingsService() : super(baseUrl: '');
+
+  final Map<String, ProfileSettings> _settings = {};
+  final Map<String, String> _pins = {};
+
+  @override
+  Future<ProfileSettings?> read(String mobileNumber) async =>
+      _settings[mobileNumber] ?? const ProfileSettings();
+
+  @override
+  Future<ProfileSettings?> update({
+    required String mobileNumber,
+    AppLanguage? language,
+    bool? languageRemembered,
+    ThemeMode? themeMode,
+  }) async {
+    final current = _settings[mobileNumber] ?? const ProfileSettings();
+    final next = ProfileSettings(
+      language: language ?? current.language,
+      languageRemembered: languageRemembered ?? current.languageRemembered,
+      themeMode: themeMode ?? current.themeMode,
+      pinSet: current.pinSet,
+      pinEnabled: current.pinEnabled,
+    );
+    _settings[mobileNumber] = next;
+    return next;
+  }
+
+  @override
+  Future<PinFailure?> setPin({
+    required String mobileNumber,
+    required String pin,
+    String? currentPin,
+  }) async {
+    if (pin.length != 4 || int.tryParse(pin) == null) {
+      return PinFailure.malformed;
+    }
+    final existing = _pins[mobileNumber];
+    if (existing != null && existing != currentPin) return PinFailure.wrongPin;
+    _pins[mobileNumber] = pin;
+    final current = _settings[mobileNumber] ?? const ProfileSettings();
+    _settings[mobileNumber] = ProfileSettings(
+      language: current.language,
+      languageRemembered: current.languageRemembered,
+      themeMode: current.themeMode,
+      pinSet: true,
+      pinEnabled: true,
+    );
+    return null;
+  }
+
+  @override
+  Future<PinFailure?> disablePin({
+    required String mobileNumber,
+    required String pin,
+  }) async {
+    if (_pins[mobileNumber] != pin) return PinFailure.wrongPin;
+    final current = _settings[mobileNumber] ?? const ProfileSettings();
+    _settings[mobileNumber] = ProfileSettings(
+      language: current.language,
+      languageRemembered: current.languageRemembered,
+      themeMode: current.themeMode,
+      pinSet: true,
+      pinEnabled: false,
+    );
+    return null;
+  }
+
+  @override
+  Future<bool> verifyPin({
+    required String mobileNumber,
+    required String pin,
+  }) async => _pins[mobileNumber] == pin;
+
+  @override
+  Future<List<SupportContact>> supportContacts(String mobileNumber) async =>
+      const [];
+
+  @override
+  Future<Map<String, String>> appInfo() async => const {};
+}
+
 /// Wraps a value in left-to-right marks.
 ///
 /// Phone numbers and version strings read the same way in every language.

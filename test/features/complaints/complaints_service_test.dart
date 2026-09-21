@@ -32,6 +32,59 @@ Complaint complaintJson({
 });
 
 void main() {
+  group('mock complaints service', () {
+    test('keeps the seeded journey interactive and account-isolated', () async {
+      final service = ComplaintsService.mock();
+
+      final seeded = await service.list('0300 4821190');
+      expect(seeded, isNotNull);
+      expect(seeded!.complaints, hasLength(4));
+
+      final raised = await service.raise(
+        mobileNumber: '3004821190',
+        typeId: 'mock-qr_and_prizes',
+        priority: ComplaintPriority.high,
+        title: 'Prize not credited for inverter scan',
+        detail: 'The prize screen did not credit my wallet.',
+      );
+      expect(raised, isNotNull);
+      expect(
+        (await service.list('3004821190'))!.complaints,
+        contains(raised),
+      );
+      expect(
+        await service.detail(
+          mobileNumber: '3007781204',
+          reference: raised!.reference,
+        ),
+        isNull,
+      );
+
+      final notifications = await service.notifications('3004821190');
+      expect(notifications!.unread, 2);
+      await service.markRead(
+        mobileNumber: '3004821190',
+        id: notifications.notifications.first.id,
+      );
+      expect((await service.notifications('3004821190'))!.unread, 1);
+    });
+
+    test('preserves incomplete submission refusal', () async {
+      final service = ComplaintsService.mock();
+
+      expect(
+        await service.raise(
+          mobileNumber: '3004821190',
+          typeId: 'mock-qr_and_prizes',
+          priority: ComplaintPriority.high,
+          title: ' ',
+          detail: 'detail',
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('response targets', () {
     test('an answer inside the window is met', () {
       final raised = DateTime.now().subtract(const Duration(hours: 3));

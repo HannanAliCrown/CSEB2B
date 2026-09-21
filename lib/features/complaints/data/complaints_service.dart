@@ -301,22 +301,47 @@ class NotificationList {
   static const empty = NotificationList(notifications: [], unread: 0);
 }
 
-/// Complaints and notifications' data boundary, backed by the database
-/// behind `prototype_server`.
+/// Complaints and notifications' data boundary.
 ///
-/// There is deliberately no in-memory implementation. A ticket that exists
-/// only until the app restarts is worse than one that plainly fails to be
-/// raised, so these screens say so when the server cannot be reached.
+/// The server implementation remains available for the backend-backed
+/// prototype. The mock implementation uses the same contract and rules with
+/// bundled fixtures, so the complete journey can be viewed without a server.
 class ComplaintsService {
   ComplaintsService({required String baseUrl, http.Client? client})
     : _baseUrl = baseUrl,
-      _client = client ?? http.Client();
+      _client = client ?? http.Client(),
+      _mock = false,
+      _mockComplaints = {},
+      _mockNotifications = {};
+
+  ComplaintsService.mock()
+    : _baseUrl = '',
+      _client = http.Client(),
+      _mock = true,
+      _mockComplaints = _demoComplaints(),
+      _mockNotifications = _demoNotifications();
 
   final String _baseUrl;
   final http.Client _client;
+  final bool _mock;
+  final Map<String, List<Complaint>> _mockComplaints;
+  final Map<String, List<AppNotification>> _mockNotifications;
+
+  var _nextMockReference = 5515;
+  var _nextMockNotification = 6;
+
+  static const _mockAccounts = {
+    '3217745002',
+    '3004821190',
+    '3007781204',
+    '3014429911',
+    '3335560071',
+    '3028890143',
+  };
 
   /// The categories, sub-types and targets the wizard offers.
   Future<List<ComplaintCategory>> catalogue() async {
+    if (_mock) return _mockCatalogue();
     final body = await _get('/complaints/catalogue');
     if (body == null) return const [];
     return [
@@ -326,6 +351,17 @@ class ComplaintsService {
   }
 
   Future<ComplaintList?> list(String mobileNumber) async {
+    if (_mock) {
+      final account = _normaliseMobile(mobileNumber);
+      if (!_mockAccounts.contains(account)) return null;
+      final complaints = List<Complaint>.of(_mockComplaints[account] ?? const [])
+        ..sort((a, b) => b.raisedAt.compareTo(a.raisedAt));
+      return ComplaintList(
+        complaints: complaints,
+        inProgress: complaints.where((complaint) => !complaint.resolved).length,
+        resolved: complaints.where((complaint) => complaint.resolved).length,
+      );
+    }
     final body = await _get('/complaints', {'mobileNumber': mobileNumber});
     if (body == null) return null;
     return ComplaintList(
@@ -342,6 +378,15 @@ class ComplaintsService {
     required String mobileNumber,
     required String reference,
   }) async {
+    if (_mock) {
+      final account = _normaliseMobile(mobileNumber);
+      if (!_mockAccounts.contains(account)) return null;
+      final complaints = _mockComplaints[account] ?? const <Complaint>[];
+      for (final complaint in complaints) {
+        if (complaint.reference == reference) return complaint;
+      }
+      return null;
+    }
     final body = await _get('/complaints/$reference', {
       'mobileNumber': mobileNumber,
     });
@@ -357,6 +402,64 @@ class ComplaintsService {
     required String title,
     required String detail,
   }) async {
+    if (_mock) {
+      final account = _normaliseMobile(mobileNumber);
+      if (!_mockAccounts.contains(account) ||
+          title.trim().isEmpty ||
+          detail.trim().isEmpty) {
+        return null;
+      }
+
+      final category = _mockCatalogue().where((item) => item.id == typeId);
+      if (category.isEmpty || category.first.targetFor(priority) == null) {
+        return null;
+      }
+      final target = category.first.targetFor(priority)!;
+      final raisedAt = DateTime.now();
+      final complaint = Complaint(
+        reference: 'CMP-2026-${_nextMockReference++}',
+        typeLabel: category.first.label,
+        categoryLabel: category.first.code == 'qr_and_prizes'
+            ? 'QR prize dispute'
+            : category.first.label,
+        priority: priority,
+        title: title.trim(),
+        detail: detail.trim(),
+        resolved: false,
+        responseTarget: Duration(minutes: target.responseMinutes),
+        resolutionTargetWorkingDays: target.resolutionWorkingDays,
+        raisedAt: raisedAt,
+        resolutionDueAt: raisedAt.add(
+          Duration(days: target.resolutionWorkingDays),
+        ),
+        events: [
+          ComplaintEvent(
+            title: 'Complaint raised',
+            meta: 'Submitted by you.',
+            state: 'done',
+            occurredAt: raisedAt,
+          ),
+          const ComplaintEvent(title: 'Awaiting resolution', state: 'active'),
+        ],
+      );
+      (_mockComplaints[account] ??= []).add(complaint);
+      (_mockNotifications[account] ??= []).insert(
+        0,
+        AppNotification(
+          id: 'mock-notification-${_nextMockNotification++}',
+          level: 'info',
+          title: 'Complaint ${complaint.reference} raised',
+          body:
+              'Crown Solar has your complaint. You will be told on every '
+              'status change.',
+          destinationLabel: 'opens Complaint detail',
+          destinationRoute: '/complaints/${complaint.reference}',
+          createdAt: raisedAt,
+          read: false,
+        ),
+      );
+      return complaint;
+    }
     try {
       final response = await _client.post(
         Uri.parse('$_baseUrl/complaints'),
@@ -379,6 +482,17 @@ class ComplaintsService {
   }
 
   Future<NotificationList?> notifications(String mobileNumber) async {
+    if (_mock) {
+      final account = _normaliseMobile(mobileNumber);
+      if (!_mockAccounts.contains(account)) return null;
+      final notifications = List<AppNotification>.of(
+        _mockNotifications[account] ?? const [],
+      );
+      return NotificationList(
+        notifications: notifications,
+        unread: notifications.where((notification) => !notification.read).length,
+      );
+    }
     final body = await _get('/notifications', {'mobileNumber': mobileNumber});
     if (body == null) return null;
     return NotificationList(
@@ -392,6 +506,28 @@ class ComplaintsService {
 
   /// Marks one read, or every one when [id] is null.
   Future<void> markRead({required String mobileNumber, String? id}) async {
+    if (_mock) {
+      final account = _normaliseMobile(mobileNumber);
+      final notifications = _mockNotifications[account];
+      if (notifications == null) return;
+      for (var index = 0; index < notifications.length; index++) {
+        final notification = notifications[index];
+        if (notification.read || (id != null && notification.id != id)) {
+          continue;
+        }
+        notifications[index] = AppNotification(
+          id: notification.id,
+          level: notification.level,
+          title: notification.title,
+          body: notification.body,
+          destinationLabel: notification.destinationLabel,
+          destinationRoute: notification.destinationRoute,
+          createdAt: notification.createdAt,
+          read: true,
+        );
+      }
+      return;
+    }
     try {
       await _client.post(
         Uri.parse('$_baseUrl/notifications/read'),
@@ -402,6 +538,192 @@ class ComplaintsService {
       // Nothing to tell the partner: the list reloads either way, and an
       // unread dot that lingers is not worth an error message.
     }
+  }
+
+  static String _normaliseMobile(String mobileNumber) {
+    final digits = mobileNumber.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('92')) return digits.substring(2);
+    if (digits.startsWith('0')) return digits.substring(1);
+    return digits;
+  }
+
+  static List<ComplaintCategory> _mockCatalogue() => [
+    for (final entry in const [
+      ('qr_and_prizes', 'QR and prizes', 'QR prize dispute'),
+      ('wallet_and_cash', 'Wallet and cash', null),
+      ('points', 'Points', null),
+      ('shop_branding', 'Shop branding', null),
+      ('account_and_access', 'Account and access', null),
+      ('something_else', 'Something else', null),
+    ])
+      ComplaintCategory(
+        id: 'mock-${entry.$1}',
+        code: entry.$1,
+        label: entry.$2,
+        targets: {
+          ComplaintPriority.high: const ComplaintTarget(
+            responseMinutes: 240,
+            resolutionWorkingDays: 2,
+          ),
+          ComplaintPriority.medium: const ComplaintTarget(
+            responseMinutes: 480,
+            resolutionWorkingDays: 3,
+          ),
+          ComplaintPriority.low: const ComplaintTarget(
+            responseMinutes: 1440,
+            resolutionWorkingDays: 5,
+          ),
+        },
+      ),
+  ];
+
+  static Map<String, List<Complaint>> _demoComplaints() {
+    final now = DateTime.now();
+    Complaint eventComplaint({
+      required String reference,
+      required String category,
+      required ComplaintPriority priority,
+      required String title,
+      required String detail,
+      required bool resolved,
+      required Duration age,
+    }) {
+      final raisedAt = now.subtract(age);
+      final respondedAt = raisedAt.add(
+        priority == ComplaintPriority.high
+            ? const Duration(hours: 1, minutes: 12)
+            : const Duration(hours: 3),
+      );
+      final resolvedAt = resolved
+          ? respondedAt.add(const Duration(days: 1))
+          : null;
+      return Complaint(
+        reference: reference,
+        typeLabel: category,
+        categoryLabel: category == 'QR and prizes'
+            ? 'QR prize dispute'
+            : category,
+        priority: priority,
+        title: title,
+        detail: detail,
+        resolved: resolved,
+        evidenceNote: null,
+        responseTarget: Duration(
+          minutes: switch (priority) {
+            ComplaintPriority.high => 240,
+            ComplaintPriority.medium => 480,
+            ComplaintPriority.low => 1440,
+          },
+        ),
+        resolutionTargetWorkingDays: switch (priority) {
+          ComplaintPriority.high => 2,
+          ComplaintPriority.medium => 3,
+          ComplaintPriority.low => 5,
+        },
+        raisedAt: raisedAt,
+        resolutionDueAt: raisedAt.add(const Duration(days: 2)),
+        firstResponseAt: respondedAt,
+        resolvedAt: resolvedAt,
+        events: [
+          ComplaintEvent(
+            title: 'Complaint raised',
+            meta: 'Submitted by you.',
+            state: 'done',
+            occurredAt: raisedAt,
+          ),
+          ComplaintEvent(
+            title: 'First response',
+            meta: 'Crown Solar acknowledged the complaint.',
+            note: 'response target met',
+            state: 'done',
+            occurredAt: respondedAt,
+          ),
+          if (resolved)
+            ComplaintEvent(
+              title: 'Resolved',
+              meta: 'Closed by CRM.',
+              state: 'done',
+              occurredAt: resolvedAt,
+            )
+          else
+            const ComplaintEvent(
+              title: 'Awaiting resolution',
+              state: 'active',
+            ),
+        ],
+      );
+    }
+
+    return {
+      '3004821190': [
+        eventComplaint(
+          reference: 'CMP-2026-5514',
+          category: 'QR and prizes',
+          priority: ComplaintPriority.high,
+          title: 'Prize not credited for inverter scan',
+          detail:
+              'I scanned a Crown 8kW inverter at about 3 pm. The app showed '
+              'the prize screen but nothing came into my wallet.',
+          resolved: false,
+          age: const Duration(hours: 3, minutes: 12),
+        ),
+        eventComplaint(
+          reference: 'CMP-2026-5390',
+          category: 'Shop branding',
+          priority: ComplaintPriority.medium,
+          title: 'Board installed with wrong shop name',
+          detail: 'The shop name on the frontlit board is incorrect.',
+          resolved: false,
+          age: const Duration(days: 17),
+        ),
+        eventComplaint(
+          reference: 'CMP-2026-5102',
+          category: 'Points',
+          priority: ComplaintPriority.medium,
+          title: 'Points missing for August purchase',
+          detail: 'No points were posted against the invoice.',
+          resolved: true,
+          age: const Duration(days: 30),
+        ),
+        eventComplaint(
+          reference: 'CMP-2026-4977',
+          category: 'Account and access',
+          priority: ComplaintPriority.low,
+          title: 'Cannot sign in on my new phone',
+          detail: 'The app says my account is fixed to another device.',
+          resolved: true,
+          age: const Duration(days: 38),
+        ),
+      ],
+    };
+  }
+
+  static Map<String, List<AppNotification>> _demoNotifications() {
+    final now = DateTime.now();
+    return {
+      '3004821190': [
+        AppNotification(
+          id: 'mock-notification-1',
+          level: 'info',
+          title: 'Complaint CMP-2026-5514 raised',
+          body: 'Crown Solar has your complaint.',
+          destinationLabel: 'opens Complaint detail',
+          destinationRoute: '/complaints/CMP-2026-5514',
+          createdAt: now.subtract(const Duration(hours: 2)),
+          read: false,
+        ),
+        AppNotification(
+          id: 'mock-notification-2',
+          level: 'success',
+          title: 'Points complaint resolved',
+          body: 'Your complaint was closed by CRM.',
+          destinationLabel: 'opens Complaint detail',
+          destinationRoute: '/complaints/CMP-2026-5102',
+          createdAt: now.subtract(const Duration(days: 3)),
+          read: true,
+        ),
+      ],
+    };
   }
 
   Future<Map<String, dynamic>?> _get(

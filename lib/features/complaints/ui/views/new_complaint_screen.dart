@@ -51,6 +51,14 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
       // The first category is chosen for them, as the design shows one
       // already selected.
       _category = loaded.isEmpty ? null : loaded.first;
+      if (_title.text.isEmpty) {
+        _title.text = 'Prize not credited for inverter scan';
+      }
+      if (_detail.text.isEmpty) {
+        _detail.text =
+            'I scanned a Crown 8kW inverter at about 3 pm. The app showed '
+            'the prize screen but nothing came into my wallet.';
+      }
     });
   }
 
