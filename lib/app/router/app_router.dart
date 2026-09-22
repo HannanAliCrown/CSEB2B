@@ -65,7 +65,7 @@ import 'package:cse_b2b/features/wallet/ui/views/ledger_screen.dart';
 import 'package:cse_b2b/features/wallet/ui/views/send_cash_screen.dart';
 import 'package:cse_b2b/features/design_preview/preview_catalog.dart';
 import 'package:cse_b2b/features/design_preview/preview_gallery_screen.dart';
-import 'package:cse_b2b/features/login/ui/views/sign_in_screen.dart';
+import 'package:cse_b2b/features/login/ui/views/login_flow_screen.dart';
 import 'package:cse_b2b/features/registration/data/repositories/registration_repository.dart';
 import 'package:cse_b2b/features/registration/data/services/media_capture_service.dart';
 import 'package:cse_b2b/features/registration/data/services/http_registration_service.dart';
@@ -410,33 +410,20 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: AppRoutes.login,
-        // The Crown Solar sign-in screen is the visual source of truth.
-        // Login's own device-binding logic is a separate piece of work; this
-        // route exists so first launch can hand off to it, and so "Register"
-        // reaches the registration wizard.
-        builder: (context, state) => ChangeNotifierProvider.value(
-          value: session,
-          child: Consumer<SessionController>(
-            builder: (context, controller, _) => SignInScreen(
-              busy: controller.busy,
-              error: switch (controller.failure) {
-                SignInFailure.malformedNumber =>
-                  'Enter the 10 digits after +92, for example 300 4821190.',
-                SignInFailure.unknownNumber =>
-                  'No Crown Solar account uses this number. Register instead.',
-                null => null,
-              },
-              // Pushed, not replaced, so the wizard's first step can go back
-              // to sign-in.
-              onRegister: () => context.push(AppRoutes.register),
-              onSubmit: (number, {required keepSignedIn}) async {
-                final ok = await controller.signIn(
-                  number,
-                  keepSignedIn: keepSignedIn,
-                );
-                if (ok && context.mounted) context.go(AppRoutes.home);
-              },
-            ),
+        // The Crown Solar sign-in screen is the visual source of truth, and
+        // the single-active-device policy now stands in front of it: the
+        // flow asks the server whether this phone is trusted, and only a
+        // trusted phone — or a verified move to this one — reaches Home.
+        builder: (context, state) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<SessionController>.value(value: session),
+            Provider<AuthRepository>.value(value: repository),
+          ],
+          child: LoginFlowScreen(
+            // Pushed, not replaced, so the wizard's first step can go back
+            // to sign-in.
+            onRegister: () => context.push(AppRoutes.register),
+            onSignedIn: () => context.go(AppRoutes.home),
           ),
         ),
       ),
