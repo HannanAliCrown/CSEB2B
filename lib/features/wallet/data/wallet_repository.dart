@@ -190,8 +190,6 @@ abstract interface class WalletRepository {
 class MockWalletRepository implements WalletRepository {
   MockWalletRepository();
 
-  static const _latency = Duration(milliseconds: 220);
-
   /// The smallest transfer Crown Solar accepts.
   static final minimumTransfer = Money.rupees(100);
 
@@ -242,7 +240,6 @@ class MockWalletRepository implements WalletRepository {
 
   @override
   Future<Money> balance(SignedInUser user) async {
-    await Future<void>.delayed(_latency);
     return _clearedBalance(user);
   }
 
@@ -265,7 +262,6 @@ class MockWalletRepository implements WalletRepository {
 
   @override
   Future<Money> heldTotal(SignedInUser user) async {
-    await Future<void>.delayed(_latency);
     var total = const Money(0);
     for (final entry in _ledgerFor(user)) {
       if (entry.state == LedgerState.held) total = total + entry.amount;
@@ -275,7 +271,6 @@ class MockWalletRepository implements WalletRepository {
 
   @override
   Future<List<LedgerEntry>> ledger(SignedInUser user) async {
-    await Future<void>.delayed(_latency);
     final entries = [..._ledgerFor(user)]
       ..sort((a, b) => b.postedAt.compareTo(a.postedAt));
     return entries;
@@ -283,7 +278,6 @@ class MockWalletRepository implements WalletRepository {
 
   @override
   Future<List<CashRecipient>> recentRecipients(SignedInUser user) async {
-    await Future<void>.delayed(_latency);
     final mine = PartnerDirectory.normalise(user.mobileNumber);
     return PartnerDirectory.accounts
         .where(
@@ -303,7 +297,6 @@ class MockWalletRepository implements WalletRepository {
 
   @override
   Future<CashRecipient?> lookupRecipient(String mobileNumber) async {
-    await Future<void>.delayed(_latency);
     final account = PartnerDirectory.find(mobileNumber);
     if (account == null || !receivingRoles.contains(account.role)) return null;
     return CashRecipient(
@@ -320,8 +313,6 @@ class MockWalletRepository implements WalletRepository {
     required Money amount,
     String? note,
   }) async {
-    await Future<void>.delayed(_latency);
-
     if (amount.compareTo(minimumTransfer) < 0) {
       return const TransferResult.failed(TransferFailure.amountTooSmall);
     }

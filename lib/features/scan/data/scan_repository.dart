@@ -161,8 +161,6 @@ class MockScanRepository implements ScanRepository {
 
   final WalletRepository _wallet;
 
-  static const _latency = Duration(milliseconds: 450);
-
   /// What a winning scan pays, by role. Prototype figures — the real amounts
   /// belong to whichever scheme Crown Solar is running.
   ///
@@ -238,8 +236,6 @@ class MockScanRepository implements ScanRepository {
     required SignedInUser user,
     required ScanMode mode,
   }) async {
-    await Future<void>.delayed(_latency);
-
     final normalised = code.trim().toUpperCase();
 
     if (!normalised.startsWith('CS-') || normalised.length < 10) {

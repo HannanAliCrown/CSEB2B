@@ -123,8 +123,6 @@ abstract interface class ChatRepository {
 class MockChatRepository implements ChatRepository {
   MockChatRepository();
 
-  static const _latency = Duration(milliseconds: 180);
-
   final _changes = _Broadcast();
   var _nextId = 1;
 
@@ -141,7 +139,6 @@ class MockChatRepository implements ChatRepository {
 
   @override
   Future<List<ChatThread>> threads(SignedInUser user) async {
-    await Future<void>.delayed(_latency);
     final threads = [..._threadsFor(user)];
     // Newest conversation first, as every chat app orders them.
     threads.sort((a, b) {
@@ -167,7 +164,6 @@ class MockChatRepository implements ChatRepository {
 
   @override
   Future<ChatParty?> partyForNumber(String mobileNumber) async {
-    await Future<void>.delayed(_latency);
     final account = PartnerDirectory.find(mobileNumber);
     return account == null ? null : ChatParty.partner(account);
   }

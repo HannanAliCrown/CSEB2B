@@ -89,12 +89,8 @@ class MockDashboardRepository implements DashboardRepository {
 
   final WalletRepository _wallet;
 
-  static const _latency = Duration(milliseconds: 200);
-
   @override
   Future<Dashboard> load(SignedInUser user) async {
-    await Future<void>.delayed(_latency);
-
     final balance = await _wallet.balance(user);
     final held = await _wallet.heldTotal(user);
 

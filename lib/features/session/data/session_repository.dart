@@ -43,10 +43,6 @@ class SessionRepository {
 
   static const _key = 'session.user';
 
-  /// Simulated latency, so the sign-in button's loading state is exercised
-  /// the way it will be against a real network.
-  static const _latency = Duration(milliseconds: 250);
-
   /// Restores the session saved by "Keep me signed in", if there is one.
   Future<SignedInUser?> restore() async {
     final raw = await _preferences.readString(_key);
@@ -64,8 +60,6 @@ class SessionRepository {
     String mobileNumber, {
     required bool keepSignedIn,
   }) async {
-    await Future<void>.delayed(_latency);
-
     if (PartnerDirectory.normalise(mobileNumber).length != 10) {
       return const SignInResult.failed(SignInFailure.malformedNumber);
     }

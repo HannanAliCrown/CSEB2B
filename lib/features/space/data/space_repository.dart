@@ -140,8 +140,6 @@ abstract interface class SpaceRepository {
 class MockSpaceRepository implements SpaceRepository {
   MockSpaceRepository();
 
-  static const _latency = Duration(milliseconds: 200);
-
   final _changes = _Broadcast();
   var _nextId = 1;
 
@@ -152,7 +150,6 @@ class MockSpaceRepository implements SpaceRepository {
 
   @override
   Future<List<SpacePost>> feed(SignedInUser user) async {
-    await Future<void>.delayed(_latency);
     final visible =
         _posts.where((post) => post.audience.reaches(user.role)).toList()
           ..sort((a, b) => b.postedAt.compareTo(a.postedAt));
@@ -185,7 +182,6 @@ class MockSpaceRepository implements SpaceRepository {
     required SignedInUser user,
     required String body,
   }) async {
-    await Future<void>.delayed(_latency);
     final post = _posts.firstWhere((p) => p.id == postId);
     final comment = PostComment(
       id: 'C${_nextId++}',
@@ -205,7 +201,6 @@ class MockSpaceRepository implements SpaceRepository {
     required SignedInUser user,
     required String body,
   }) async {
-    await Future<void>.delayed(_latency);
     final post = _posts.firstWhere((p) => p.id == postId);
     final comment = post.comments.firstWhere((c) => c.id == commentId);
     final reply = PostReply(

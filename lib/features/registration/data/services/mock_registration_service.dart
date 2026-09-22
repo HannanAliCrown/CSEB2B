@@ -14,23 +14,17 @@ class MockRegistrationService implements RegistrationService {
 
   final MockRegistrationDataStore _store;
 
-  /// A small delay so the UI's loading states are exercised the way they
-  /// will be against a real network.
-  static const _latency = Duration(milliseconds: 250);
-
   RegistrationSubmission? _submission;
 
   MockRegistrationDataStore get store => _store;
 
   @override
   Future<List<String>> markets() async {
-    await Future<void>.delayed(_latency);
     return MockRegistrationDataStore.seededMarkets;
   }
 
   @override
   Future<AccountLookupResult> lookupAccount(String mobileNumber) async {
-    await Future<void>.delayed(_latency);
     final account = _store.accountFor(mobileNumber);
     if (account == null) return const AccountLookupResult.notFound();
     return AccountLookupResult.existing(
@@ -41,7 +35,6 @@ class MockRegistrationService implements RegistrationService {
 
   @override
   Future<OtpIssueResult> requestRegistrationOtp(String mobileNumber) async {
-    await Future<void>.delayed(_latency);
     return OtpIssueResult(prototypeCode: _store.issueOtp(mobileNumber));
   }
 
@@ -50,7 +43,6 @@ class MockRegistrationService implements RegistrationService {
     required String mobileNumber,
     required String code,
   }) async {
-    await Future<void>.delayed(_latency);
     final expected = _store.expectedOtp(mobileNumber);
     if (expected == null) return OtpVerifyOutcome.noChallenge;
     if (expected != code) return OtpVerifyOutcome.invalidCode;
@@ -64,7 +56,6 @@ class MockRegistrationService implements RegistrationService {
 
   @override
   Future<BuyingSourceLookup> lookupBuyingSource(String mobileNumber) async {
-    await Future<void>.delayed(_latency);
     final account = _store.accountFor(mobileNumber);
     if (account == null) return const BuyingSourceLookup.notFound();
     if (!buyingSourceRoles.contains(account.role)) {
@@ -82,13 +73,11 @@ class MockRegistrationService implements RegistrationService {
 
   @override
   Future<bool> cnicAlreadyRegistered(String cnicNumber) async {
-    await Future<void>.delayed(_latency);
     return _store.accountForCnic(cnicNumber) != null;
   }
 
   @override
   Future<RegistrationSubmission> submit(RegistrationDraft draft) async {
-    await Future<void>.delayed(_latency);
     final submittedAt = DateTime.now();
     final reference =
         'CSE-PR-${submittedAt.year}-'
