@@ -4,6 +4,7 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import 'package:prototype_server/data/postgres_auth_data_store.dart';
+import 'package:prototype_server/data/postgres_branding_data_store.dart';
 import 'package:prototype_server/data/postgres_complaints_data_store.dart';
 import 'package:prototype_server/data/postgres_inaam_data_store.dart';
 import 'package:prototype_server/data/postgres_partner_data_store.dart';
@@ -26,6 +27,7 @@ Future<void> main() async {
   final scan = PostgresScanDataStore(client);
   final points = PostgresPointsDataStore(client);
   final inaam = PostgresInaamDataStore(client);
+  final branding = PostgresBrandingDataStore(client);
   final router = buildRouter(
     store,
     partners: partners,
@@ -36,6 +38,7 @@ Future<void> main() async {
     scan: scan,
     points: points,
     inaam: inaam,
+    branding: branding,
   );
 
   final pipeline = const Pipeline()

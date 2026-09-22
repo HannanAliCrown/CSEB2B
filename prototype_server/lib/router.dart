@@ -1,6 +1,7 @@
 import 'package:shelf_router/shelf_router.dart';
 
 import 'data/auth_data_store.dart';
+import 'data/branding_data_store.dart';
 import 'data/complaints_data_store.dart';
 import 'data/inaam_data_store.dart';
 import 'data/partner_data_store.dart';
@@ -9,6 +10,7 @@ import 'data/profile_data_store.dart';
 import 'data/scan_data_store.dart';
 import 'data/wallet_data_store.dart';
 import 'data/social_data_store.dart';
+import 'routes/branding_routes.dart';
 import 'routes/complaints_routes.dart';
 import 'routes/device_status_routes.dart';
 import 'routes/login_otp_routes.dart';
@@ -36,6 +38,7 @@ Router buildRouter(
   ScanDataStore? scan,
   PointsDataStore? points,
   InaamDataStore? inaam,
+  BrandingDataStore? branding,
 }) {
   final router = Router();
   // First launch and the registration wizard. Optional so the auth tests can
@@ -55,6 +58,8 @@ Router buildRouter(
   }
   // Inaam Baazar: spins, item schemes and the monthly programme.
   if (inaam != null) router.mount('/', inaamRoutes(inaam).call);
+  // Shop Branding: the request, its status, and which boards are offered.
+  if (branding != null) router.mount('/', brandingRoutes(branding).call);
   // Points: their own ledger, never joined to the wallet's.
   if (points != null) router.mount('/', pointsRoutes(points).call);
   // Send Cash, the ledger and the scanner — one money, one store.

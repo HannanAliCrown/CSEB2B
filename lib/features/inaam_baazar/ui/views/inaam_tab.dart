@@ -6,14 +6,13 @@ import '../../../../core/ui/ds.dart';
 import '../../../session/ui/session_controller.dart';
 import '../../../wallet/data/wallet_repository.dart';
 import '../../data/inaam_service.dart';
-import 'scheme_screens.dart' show TierRow;
-import 'spin_screens.dart' show SpinWheel;
+import '../widgets/inaam_widgets.dart';
 
 /// Board 09 — Inaam Baazar.
 ///
-/// Three ways Crown Solar rewards an installer for scanning, behind one
-/// segmented control. Every prize lands in the cash wallet; Inaam has no
-/// balance of its own, and none is shown here.
+/// Three ways Crown Solar rewards an installer for scanning, behind one set
+/// of tabs. Every prize lands in the cash wallet; Inaam has no balance of its
+/// own, and none is shown here.
 class InaamTab extends StatefulWidget {
   const InaamTab({super.key, required this.onOpenScanner});
 
@@ -73,43 +72,69 @@ class _InaamTabState extends State<InaamTab> {
       );
     }
 
+    // The board rules the tabs across the top and scrolls only what is under
+    // them, so switching tab never scrolls the control out of reach.
+    final sections = !_reachable
+        ? const [
+            DsNotice(
+              icon: LucideIcons.cloudOff,
+              tone: DsTone.warning,
+              message:
+                  'Could not reach Crown Solar, so nothing here is your '
+                  'real position. Pull down to try again.',
+            ),
+          ]
+        : switch (_tab) {
+            _reward => _rewardSection(),
+            _item => _itemSection(),
+            _ => _spinSection(spin),
+          };
+
+    final gap = _tab == _item ? 14.0 : AppSpacing.md;
+
     return Scaffold(
       appBar: const DsAppBar(title: 'Inaam Baazar'),
       body: SafeArea(
         bottom: false,
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.screenPadding),
-            children: [
-              DsSegmentedControl(
-                options: const [_spin, _reward, _item],
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.screenPadding,
+                10,
+                AppSpacing.screenPadding,
+                0,
+              ),
+              child: DsTabs(
+                tabs: const [_spin, _reward, _item],
                 value: _tab,
                 onChanged: (tab) => setState(() => _tab = tab),
               ),
-              const SizedBox(height: AppSpacing.md),
-              if (!_reachable)
-                const DsNotice(
-                  icon: LucideIcons.cloudOff,
-                  tone: DsTone.warning,
-                  message:
-                      'Could not reach Crown Solar, so nothing here is your '
-                      'real position. Pull down to try again.',
-                )
-              else
-                ...switch (_tab) {
-                  _reward => _rewardSection(),
-                  _item => _itemSection(),
-                  _ => _spinSection(spin),
-                },
-            ],
-          ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _load,
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenPadding,
+                    AppSpacing.md,
+                    AppSpacing.screenPadding,
+                    AppSpacing.stepLg,
+                  ),
+                  itemCount: sections.length,
+                  separatorBuilder: (_, _) => SizedBox(height: gap),
+                  itemBuilder: (_, index) => sections[index],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
+      bottomNavigationBar: _claimFooter(),
     );
   }
 
-  // --- A1 · Spin and Win ----------------------------------------------------
+  // --- A1 · A2 · A3 · Spin and Win ------------------------------------------
 
   List<Widget> _spinSection(SpinState spin) {
     if (!spin.configured) {
@@ -124,117 +149,58 @@ class _InaamTabState extends State<InaamTab> {
       ];
     }
 
+    final visible = _visibleHistory(spin);
+
     return [
-      DsCard(
-        tone: DsCardTone.accent,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'SPINS AVAILABLE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 0.06 * 11,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        '${spin.spinsAvailable}',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.primary,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Flexible(
-                        child: DsBody(
-                          spin.spinsAvailable == 1
-                              ? 'spin ready to use'
-                              : 'spins ready to use',
-                          size: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const DsTag(label: 'Today', tone: DsTone.accent),
-          ],
-        ),
+      InaamSpinsCard(
+        spins: spin.spinsAvailable,
+        scansToday: spin.scansToday,
+        scansTarget: spin.scansToday + spin.scansToNextSpin,
+        progress: spin.progress,
+        note:
+            '${spin.scansToNextSpin} more '
+            '${spin.scansToNextSpin == 1 ? 'scan' : 'scans'} earns another '
+            'spin. There is no limit on how many you can earn in a day.',
       ),
-      const SizedBox(height: AppSpacing.stepMd),
-      DsCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Scans today',
-                    style: context.texts.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                DsCaption(
-                  '${spin.scansToday} of '
-                  '${spin.scansToday + spin.scansToNextSpin} for the next spin',
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            DsProgressBar(value: spin.progress),
-            const SizedBox(height: 10),
-            DsCaption(
-              '${spin.scansToNextSpin} more '
-              '${spin.scansToNextSpin == 1 ? 'scan' : 'scans'} earns another '
-              'spin. There is no limit on how many you can earn in a day.',
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: AppSpacing.lg),
-      Center(
-        child: SpinWheel(
-          values: [for (final prize in spin.segments) prize.formatted],
-        ),
-      ),
-      const SizedBox(height: AppSpacing.md),
-      DsCaption(
-        spin.segments.isEmpty
-            ? 'Prizes are credited to your wallet.'
-            : 'Prizes range from Rs. ${spin.segments.first.formatted} to '
-                  'Rs. ${_largest(spin.segments).formatted} and are credited '
-                  'to your wallet.',
-        align: TextAlign.center,
-      ),
-      const SizedBox(height: AppSpacing.md),
+
+      // With a spin waiting the wheel is the screen; with none it would be a
+      // control that does nothing, so the board replaces it outright.
       if (spin.spinsAvailable > 0)
-        DsButton(
-          label: 'Spin Now',
-          icon: LucideIcons.sparkles,
-          loading: _busy,
-          disabled: _busy,
-          onPressed: _takeSpin,
+        DsCard(
+          child: Column(
+            children: [
+              InaamSpinWheel(
+                labels: [for (final prize in spin.segments) prize.formatted],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                spin.segments.isEmpty
+                    ? 'Prizes are credited to your wallet.'
+                    : 'Prizes range from Rs. ${spin.segments.first.formatted} '
+                          'to Rs. ${_largest(spin.segments).formatted} and are '
+                          'credited to your wallet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 19 / 13,
+                  color: context.colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              DsButton(
+                label: 'Spin Now',
+                loading: _busy,
+                disabled: _busy,
+                onPressed: _takeSpin,
+              ),
+            ],
+          ),
         )
       else
         DsCard(
           padding: EdgeInsets.zero,
           child: DsEmptyState(
-            icon: LucideIcons.sparkles,
+            icon: LucideIcons.scanLine,
             title: 'No Spins Right Now',
             message:
                 'You have ${spin.scansToday} '
@@ -245,16 +211,31 @@ class _InaamTabState extends State<InaamTab> {
             onAction: widget.onOpenScanner,
           ),
         ),
-      const SizedBox(height: AppSpacing.lg),
-      DsSectionHeader(
-        title: 'Spin history',
-        // "See all" opens nothing: the rest of the history is already here,
-        // just folded. A control that led to a screen which does not exist
-        // would be worse than none.
-        actionLabel: spin.history.length > _historyPreview && !_allHistory
-            ? 'See all'
-            : null,
-        onAction: () => setState(() => _allHistory = true),
+
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Spin history',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+          // "See all" opens nothing: the rest of the history is already here,
+          // just folded. A control that led to a screen which does not exist
+          // would be worse than none.
+          if (spin.history.length > _historyPreview && !_allHistory)
+            GestureDetector(
+              onTap: () => setState(() => _allHistory = true),
+              child: Text(
+                'See all',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.primary,
+                ),
+              ),
+            ),
+        ],
       ),
       if (spin.history.isEmpty)
         const DsCaption('Your spins will be listed here once you take one.')
@@ -263,23 +244,12 @@ class _InaamTabState extends State<InaamTab> {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
           child: Column(
             children: [
-              for (var i = 0; i < _visibleHistory(spin).length; i++) ...[
-                DsSettingRow(
-                  label: 'Rs. ${_visibleHistory(spin)[i].amount.formatted}',
-                  meta: formatSpinWhen(_visibleHistory(spin)[i].spunAt),
-                  leading: const DsIconMedallion(
-                    icon: LucideIcons.sparkles,
-                    tone: DsTone.solar,
-                    size: 34,
-                    iconSize: 16,
-                  ),
-                  trailing: const DsTag(
-                    label: 'Credited',
-                    tone: DsTone.success,
-                  ),
+              for (var i = 0; i < visible.length; i++)
+                InaamSpinRow(
+                  prize: 'Rs. ${visible[i].amount.formatted}',
+                  when: formatSpinWhen(visible[i].spunAt),
+                  last: i == visible.length - 1,
                 ),
-                if (i != _visibleHistory(spin).length - 1) const DsHairline(),
-              ],
             ],
           ),
         ),
@@ -305,6 +275,7 @@ class _InaamTabState extends State<InaamTab> {
     if (user == null) return;
 
     setState(() => _busy = true);
+    final wallet = context.read<WalletRepository>();
     final (spin, failure) = await context.read<InaamService>().spin(
       user.mobileNumber,
     );
@@ -321,69 +292,23 @@ class _InaamTabState extends State<InaamTab> {
     // A prize won and a prize paid are the same event: the server credited
     // the wallet in the same transaction, so Home is told to reload rather
     // than sitting on a balance that is already wrong.
-    context.read<WalletRepository>().announceChange();
+    wallet.announceChange();
+    final balance = await wallet.balance(user);
     await _load();
     if (!mounted) return;
-    await _showResult(spin!);
-  }
 
-  /// Board 09 · A2 — the prize revealed and credited in the same breath.
-  Future<void> _showResult(Spin spin) => showDialog<void>(
-    context: context,
-    barrierColor: const Color(0xFF0F172A).withValues(alpha: 0.45),
-    builder: (context) => Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: const EdgeInsets.all(AppSpacing.lg),
-      child: SingleChildScrollView(
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.stepLg),
-          decoration: BoxDecoration(
-            color: context.status.successFill,
-            borderRadius: AppRadii.heroRadius,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SpinWheel(size: 200),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'YOU WON',
-                style: TextStyle(
-                  fontSize: 12,
-                  letterSpacing: 0.06 * 12,
-                  fontWeight: FontWeight.w600,
-                  color: context.status.success,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Rs. ${spin.amount.formatted}',
-                style: TextStyle(
-                  fontSize: 38,
-                  height: 44 / 38,
-                  fontWeight: FontWeight.w600,
-                  color: context.status.success,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              DsBody(
-                'Rs. ${spin.amount.formatted} added to your wallet. '
-                'Ref ${spin.reference} · ${formatSpinWhen(spin.spunAt)}',
-                align: TextAlign.center,
-                color: context.status.success,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              DsButton(
-                label: 'Done',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
+    final again = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => _SpinResultScreen(
+          spin: spin!,
+          balance: balance,
+          spinsLeft: _spinState?.spinsAvailable ?? 0,
+          history: _spinState?.history ?? const [],
         ),
       ),
-    ),
-  );
+    );
+    if (again == true && mounted) await _takeSpin();
+  }
 
   // --- A4 · Reward Program --------------------------------------------------
 
@@ -394,53 +319,17 @@ class _InaamTabState extends State<InaamTab> {
       // What last month earned, and how long it runs. Shown first because it
       // is the thing paying out right now.
       if (program.hasAward)
-        DsCard(
-          tone: DsCardTone.accent,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      // The month named here is the one that earned the
-                      // bonus, not the one it runs in.
-                      program.awardEarnedOn == null
-                          ? 'Active Rewards'
-                          : 'Active Rewards · '
-                                '${formatInaamMonth(program.awardEarnedOn!)}',
-                      style: context.texts.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  DsTag(
-                    label:
-                        '${_titled(program.awardTierName!)} Inaam '
-                        '+${program.awardBonusPercent}%',
-                    tone: DsTone.accent,
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.stepMd),
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetaCell(
-                      label: 'REMAINING',
-                      value: '${program.daysRemaining} days',
-                    ),
-                  ),
-                  Expanded(
-                    child: _MetaCell(
-                      label: 'END DATE',
-                      value: formatInaamDate(program.awardAppliesUntil!),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+        InaamRewardBanner(
+          // The month named here is the one that earned the bonus, not the
+          // one it runs in.
+          title: program.awardEarnedOn == null
+              ? 'Active Rewards'
+              : 'Active Rewards · '
+                    '${formatInaamMonth(program.awardEarnedOn!)}',
+          remaining: '${program.daysRemaining} days',
+          endDate: formatInaamDate(program.awardAppliesUntil!),
+          tierName: _titled(program.awardTierName!),
+          bonus: '+${program.awardBonusPercent}%',
         )
       else
         const DsNotice(
@@ -449,7 +338,6 @@ class _InaamTabState extends State<InaamTab> {
               'You have no bonus running. Reach a tier this month and the '
               'bonus applies to next month\'s scans.',
         ),
-      const SizedBox(height: AppSpacing.md),
 
       if (!program.running)
         const DsEmptyState(
@@ -460,106 +348,139 @@ class _InaamTabState extends State<InaamTab> {
               'one before. It will appear here when it does.',
         )
       else ...[
+        Text("This Month's Scheme", style: context.texts.titleLarge),
         DsCard(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                "This Month's Scheme",
-                style: context.texts.bodyLarge?.copyWith(
+                'Target · ${formatInaamMonth(program.startsOn!)} · in progress',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              DsCaption(
-                'Target · ${formatInaamMonth(program.startsOn!)} · in progress',
+              const SizedBox(height: AppSpacing.md),
+              InaamDateStrip(
+                startLabel: 'Start date',
+                startValue: formatInaamDate(program.startsOn!),
+                endLabel: 'End date',
+                endValue: formatInaamDate(program.endsOn!),
               ),
-              const SizedBox(height: AppSpacing.stepMd),
+              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
-                  Expanded(
-                    child: _MetaCell(
-                      label: 'START DATE',
-                      value: formatInaamDate(program.startsOn!),
+                  const Expanded(
+                    child: Text(
+                      'Your progress',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                  Expanded(
-                    child: _MetaCell(
-                      label: 'END DATE',
-                      value: formatInaamDate(program.endsOn!),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.colors.primary,
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
+                    ),
+                    child: Text(
+                      '${program.scans} '
+                      '${program.scans == 1 ? 'scan' : 'scans'}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: context.colors.onPrimary,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Your progress',
-                      style: context.texts.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+              InaamMilestoneTrack(
+                milestones: [
+                  for (final tier in program.tiers)
+                    InaamMilestone(
+                      name: tier.name,
+                      target: tier.scanTarget,
+                      reached: program.scans >= tier.scanTarget,
                     ),
-                  ),
-                  Text(
-                    '${program.scans} '
-                    '${program.scans == 1 ? 'scan' : 'scans'}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 ],
+                scans: program.scans,
               ),
-              const SizedBox(height: 10),
-              DsProgressBar(value: program.percent),
-              const SizedBox(height: 10),
-              DsCaption(
+              const SizedBox(height: AppSpacing.md),
+              InaamNextUp(
                 program.next == null
                     ? 'You have reached every tier this month.'
                     : '${program.next!.scanTarget - program.scans} more scans '
                           'to unlock ${_titled(program.next!.name)} and get '
                           '+${program.next!.bonusPercent}% bonus',
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        DsCard(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: Column(
-            children: [
-              for (var i = 0; i < program.tiers.length; i++) ...[
-                TierRow(
-                  name: program.tiers[i].name,
-                  requirement: '${program.tiers[i].scanTarget} scans',
-                  reward: '+${program.tiers[i].bonusPercent}%',
-                  status: program.scans >= program.tiers[i].scanTarget
-                      ? 'Reached'
-                      : '${program.tiers[i].scanTarget - program.scans} to go',
-                  statusTone: program.scans >= program.tiers[i].scanTarget
-                      ? DsTone.success
-                      : program.next?.name == program.tiers[i].name
-                      ? DsTone.info
-                      : DsTone.neutral,
+              const SizedBox(height: AppSpacing.md),
+              // The three cards stand to the height of the tallest, as the
+              // board draws them, rather than each shrinking to its own copy.
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < program.tiers.length; i++) ...[
+                      if (i != 0) const SizedBox(width: 10),
+                      Expanded(
+                        child: InaamRewardTierCard(
+                          name: program.tiers[i].name,
+                          requirement: '${program.tiers[i].scanTarget} scans',
+                          bonus: '+${program.tiers[i].bonusPercent}%',
+                          index: i,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                if (i != program.tiers.length - 1) const DsHairline(),
-              ],
+              ),
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
-        const DsCaption(
-          'Reaching a tier marks it complete but there is nothing to claim '
-          'here. At month end the highest tier you reached is awarded, and it '
-          "becomes the extra you earn on every scheme-product scan next month.",
+        const DsNotice(
+          icon: LucideIcons.info,
+          tone: DsTone.info,
+          message:
+              'Reaching a tier marks it complete but there is nothing to '
+              'claim here. At month end the highest tier you reached is '
+              'awarded, and it becomes the extra you earn on every '
+              'scheme-product scan next month.',
         ),
       ],
     ];
   }
 
   // --- B1 · B2 · B4 · Item Scheme -------------------------------------------
+
+  /// Every scheme with a tier waiting to be taken, and the tier it is.
+  List<(ItemScheme, SchemeTier)> get _open => [
+    for (final scheme in _schemes ?? const <ItemScheme>[])
+      if (scheme.claimable != null) (scheme, scheme.claimable!),
+  ];
+
+  /// The board pins the claim to the bottom of the screen. With one scheme
+  /// open that is unambiguous; with several, each button stays under the
+  /// scheme it belongs to instead.
+  Widget? _claimFooter() {
+    if (_tab != _item || !_reachable || _open.length != 1) return null;
+    final (scheme, tier) = _open.single;
+    return DsFooterBar(
+      child: DsButton(
+        label: 'Claim ${tier.name} · Rs. ${tier.reward.formatted}',
+        loading: _busy,
+        disabled: _busy,
+        onPressed: () => _confirmClaim(scheme, tier),
+      ),
+    );
+  }
 
   List<Widget> _itemSection() {
     final schemes = _schemes!;
@@ -580,82 +501,35 @@ class _InaamTabState extends State<InaamTab> {
         // The design draws one scheme, so its card carries no name. Crown
         // Solar can run several, and then each needs saying which it is —
         // above the card rather than inside it, so the card is unchanged.
-        // The end date is not here but in the card's note below: a scheme
-        // name and a date share this row badly, and the name truncating is
-        // the worse of the two.
         if (schemes.length > 1) DsSectionHeader(title: scheme.name),
         if (scheme.claimed)
           ..._claimedScheme(scheme)
         else
           ..._openScheme(scheme),
-        const SizedBox(height: AppSpacing.lg),
       ],
     ];
   }
 
   List<Widget> _openScheme(ItemScheme scheme) {
     final claimable = scheme.claimable;
+    final next = scheme.next;
 
     return [
-      DsCard(
-        radius: AppRadii.heroRadius,
-        padding: const EdgeInsets.all(AppSpacing.stepLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              scheme.byScans ? 'MEASURED ON SCANS' : 'MEASURED ON AMOUNT',
-              style: TextStyle(
-                fontSize: 11,
-                letterSpacing: 0.06 * 11,
-                fontWeight: FontWeight.w600,
-                color: context.palette.textTertiary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                if (!scheme.byScans) ...[
-                  Text(
-                    'PKR',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: context.palette.textTertiary,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                ],
-                Text(
-                  scheme.byScans
-                      ? '${scheme.progress}'
-                      : Money(scheme.progress).formatted,
-                  style: const TextStyle(
-                    fontSize: 34,
-                    height: 40 / 34,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (scheme.byScans) ...[
-                  const SizedBox(width: AppSpacing.sm),
-                  const DsBody('scans so far', size: 14),
-                ],
-              ],
-            ),
-            const SizedBox(height: AppSpacing.stepMd),
-            DsProgressBar(value: scheme.percent),
-            const SizedBox(height: 10),
-            DsCaption(_schemeNote(scheme)),
-          ],
-        ),
+      InaamMeasureCard(
+        label: scheme.byScans ? 'Measured on scans' : 'Measured on amount',
+        prefix: scheme.byScans ? null : 'PKR',
+        value: scheme.byScans
+            ? '${scheme.progress}'
+            : Money(scheme.progress).formatted,
+        suffix: scheme.byScans ? 'scans so far' : null,
+        percent: scheme.percent,
+        note: _schemeNote(scheme),
       ),
+
       // Stated before the button is ever pressed, not after — and naming the
       // tiers it would close, because "the rest" is not a number a partner
       // can weigh.
-      if (claimable != null) ...[
-        const SizedBox(height: AppSpacing.md),
+      if (claimable != null)
         DsNotice(
           icon: LucideIcons.triangleAlert,
           tone: DsTone.warning,
@@ -664,116 +538,68 @@ class _InaamTabState extends State<InaamTab> {
               'closes ${_closingNames(scheme, claimable)} for good, even if '
               'you reach their targets later.',
         ),
-      ],
-      const SizedBox(height: AppSpacing.md),
-      DsCard(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        child: Column(
-          children: [
-            for (var i = 0; i < scheme.tiers.length; i++) ...[
-              TierRow(
-                name: scheme.tiers[i].name,
-                requirement: _tierRequirement(scheme, scheme.tiers[i]),
-                reward: 'Rs. ${scheme.tiers[i].reward.formatted}',
-                status: scheme.tiers[i].id == claimable?.id
-                    ? 'Claim now'
-                    : scheme.tiers[i].reached
-                    ? 'Reached'
-                    : 'Locked',
-                statusTone: scheme.tiers[i].reached
-                    ? DsTone.success
-                    : DsTone.neutral,
-                closed: !scheme.tiers[i].reached,
-              ),
-              if (i != scheme.tiers.length - 1) const DsHairline(),
-            ],
-          ],
+
+      for (final tier in scheme.tiers)
+        InaamTierCard(
+          name: tier.name,
+          prize: '· Rs. ${tier.reward.formatted}',
+          target: _tierRequirement(scheme, tier),
+          state: tier.id == claimable?.id
+              ? 'Claim now'
+              : tier.reached
+              ? 'Reached'
+              : 'Locked',
+          claimable: tier.id == claimable?.id,
+          // The rung after next recedes: the ladder stays legible without
+          // competing with the tier actually within reach.
+          dimmed:
+              !tier.reached && next != null && tier.threshold > next.threshold,
         ),
-      ),
-      if (claimable != null) ...[
-        const SizedBox(height: AppSpacing.md),
+
+      if (claimable == null)
+        const InaamSoftNote(
+          'A scheme is either scans or amount, set when Crown Solar creates '
+          'it. You will never see both measures on one scheme.',
+        )
+      else if (_open.length > 1)
         DsButton(
           label: 'Claim ${claimable.name} · Rs. ${claimable.reward.formatted}',
           loading: _busy,
           disabled: _busy,
           onPressed: () => _confirmClaim(scheme, claimable),
         ),
-      ],
     ];
   }
 
   /// Board 09 · B4 — claimed, with the other tiers closed.
-  List<Widget> _claimedScheme(ItemScheme scheme) => [
-    DsCard(
-      radius: AppRadii.heroRadius,
-      padding: const EdgeInsets.all(AppSpacing.stepLg),
-      child: Column(
-        children: [
-          const DsIconMedallion(
-            icon: LucideIcons.medal,
-            tone: DsTone.success,
-            size: 64,
-            iconSize: 30,
-          ),
-          const SizedBox(height: 14),
-          Text(
+  List<Widget> _claimedScheme(ItemScheme scheme) {
+    final closed = [
+      for (final tier in scheme.tiers)
+        if (tier.name != scheme.claimedTierName) tier,
+    ];
+
+    return [
+      InaamClaimedCard(
+        title:
             '${scheme.claimedTierName} claimed · '
             'Rs. ${scheme.claimedAmount!.formatted}',
-            textAlign: TextAlign.center,
-            style: context.texts.titleLarge,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          DsBody(
-            'Ref ${scheme.claimedReference} · Credited to your wallet.',
-            size: 14,
-            align: TextAlign.center,
-          ),
-        ],
+        reference: 'Ref ${scheme.claimedReference}',
+        note: 'Credited to your wallet.',
       ),
-    ),
-    const SizedBox(height: AppSpacing.md),
-    Text(
-      'NOW CLOSED TO YOU',
-      style: TextStyle(
-        fontSize: 11,
-        letterSpacing: 0.06 * 11,
-        fontWeight: FontWeight.w600,
-        color: context.palette.textTertiary,
+      const InaamCapsLabel('Now closed to you', size: 13),
+      for (final tier in closed)
+        InaamTierCard(
+          name: tier.name,
+          prize: '· Rs. ${tier.reward.formatted}',
+          target: _tierRequirement(scheme, tier),
+          dimmed: true,
+        ),
+      const InaamSoftNote(
+        'Your scanning still earns QR prizes, spins and Reward Program '
+        'bonuses as normal. Only this scheme is closed.',
       ),
-    ),
-    const SizedBox(height: AppSpacing.sm),
-    Builder(
-      builder: (context) {
-        final closed = [
-          for (final tier in scheme.tiers)
-            if (tier.name != scheme.claimedTierName) tier,
-        ];
-        return DsCard(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: Column(
-            children: [
-              for (var i = 0; i < closed.length; i++) ...[
-                TierRow(
-                  name: closed[i].name,
-                  requirement: _tierRequirement(scheme, closed[i]),
-                  reward: 'Rs. ${closed[i].reward.formatted}',
-                  status: 'Closed',
-                  statusTone: DsTone.neutral,
-                  closed: true,
-                ),
-                if (i != closed.length - 1) const DsHairline(),
-              ],
-            ],
-          ),
-        );
-      },
-    ),
-    const SizedBox(height: AppSpacing.md),
-    const DsCaption(
-      'Your scanning still earns QR prizes, spins and Reward Program bonuses '
-      'as normal. Only this scheme is closed.',
-    ),
-  ];
+    ];
+  }
 
   /// "Silver reached at 150 · 132 more scans for Gold" — what has been
   /// earned, then what is still ahead. Either clause alone when there is
@@ -851,7 +677,7 @@ class _InaamTabState extends State<InaamTab> {
         insetPadding: const EdgeInsets.all(AppSpacing.lg),
         child: SingleChildScrollView(
           child: DsDialogCard(
-            icon: LucideIcons.medal,
+            icon: LucideIcons.triangleAlert,
             title: 'Claim ${tier.name} for Rs. ${tier.reward.formatted}?',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -867,9 +693,9 @@ class _InaamTabState extends State<InaamTab> {
                   size: 14,
                 ),
                 if (scheme.next != null) ...[
-                  const SizedBox(height: AppSpacing.stepMd),
-                  DsNotice(
-                    message: scheme.byScans
+                  const SizedBox(height: AppSpacing.md),
+                  InaamSoftNote(
+                    scheme.byScans
                         ? 'You are at ${scheme.progress} scans. '
                               '${scheme.next!.name} needs '
                               '${scheme.next!.threshold}.'
@@ -877,7 +703,6 @@ class _InaamTabState extends State<InaamTab> {
                               '${Money(scheme.progress).formatted}. '
                               '${scheme.next!.name} needs PKR '
                               '${Money(scheme.next!.threshold).formatted}.',
-                    dense: true,
                   ),
                 ],
                 const SizedBox(height: AppSpacing.md),
@@ -934,33 +759,100 @@ class _InaamTabState extends State<InaamTab> {
       : name[0].toUpperCase() + name.substring(1).toLowerCase();
 }
 
-class _MetaCell extends StatelessWidget {
-  const _MetaCell({required this.label, required this.value});
+/// Board 09 · A2 — the prize revealed and credited in the same breath: the
+/// wheel settled on what it paid, the wallet's new balance, and the ledger
+/// rows it now sits at the top of.
+class _SpinResultScreen extends StatelessWidget {
+  const _SpinResultScreen({
+    required this.spin,
+    required this.balance,
+    required this.spinsLeft,
+    required this.history,
+  });
 
-  final String label;
-  final String value;
+  final Spin spin;
+  final Money balance;
+  final int spinsLeft;
+  final List<Spin> history;
+
+  /// Four rows, as the board draws them.
+  static const _rows = 4;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            letterSpacing: 0.06 * 11,
-            fontWeight: FontWeight.w600,
-            color: context.palette.textTertiary,
+    final rows = history.take(_rows).toList();
+
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: 26,
+          ),
+          child: Column(
+            children: [
+              InaamSpinWheel(
+                size: 216,
+                centre: InaamWheelPrize(amount: 'Rs. ${spin.amount.formatted}'),
+              ),
+              const SizedBox(height: AppSpacing.cardPadding),
+              Text(
+                'Rs. ${spin.amount.formatted} added to your wallet',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 22,
+                  height: 28 / 22,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.02 * 22,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              DsBody(
+                'Your balance is now PKR ${balance.formatted}. '
+                'Ref ${spin.reference} · ${formatSpinWhen(spin.spunAt)}',
+                size: 14,
+                align: TextAlign.center,
+              ),
+              if (rows.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.cardPadding),
+                DsCard(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < rows.length; i++)
+                        InaamSpinRow(
+                          prize: 'Rs. ${rows[i].amount.formatted}',
+                          when: formatSpinWhen(rows[i].spunAt),
+                          last: i == rows.length - 1,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ),
+      bottomNavigationBar: DsFooterBar(
+        child: Column(
+          children: [
+            if (spinsLeft > 0) ...[
+              DsButton(
+                label: 'Use Your Next Spin',
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+              const SizedBox(height: 10),
+            ],
+            DsButton(
+              label: 'Done',
+              variant: DsButtonVariant.quiet,
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

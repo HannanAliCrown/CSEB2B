@@ -38,6 +38,7 @@ class AppShell extends StatefulWidget {
     required this.onOpenThread,
     required this.onOpenPost,
     required this.onOpenSetting,
+    required this.onShopBranding,
   });
 
   final VoidCallback onSendCash;
@@ -60,6 +61,9 @@ class AppShell extends StatefulWidget {
   final ValueChanged<ChatParty> onOpenThread;
   final ValueChanged<SpacePost> onOpenPost;
   final Future<void> Function(String route) onOpenSetting;
+
+  /// Shop Branding, reached from Home's tile.
+  final Future<void> Function() onShopBranding;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -107,7 +111,7 @@ class _AppShellState extends State<AppShell> {
           onNotifications: widget.onNotifications,
           onProfileRequests: widget.onProfileRequests,
           onCashRequests: widget.onCashRequests,
-          onOpenModule: _comingSoon,
+          onOpenModule: _openModule,
         ),
         'space' => SpaceFeedTab(onOpenPost: widget.onOpenPost),
         'inaam' => InaamTab(onOpenScanner: widget.onScan),
@@ -139,6 +143,16 @@ class _AppShellState extends State<AppShell> {
         onChanged: (id) => setState(() => _tab = id),
       ),
     );
+  }
+
+  /// Home's tiles name their module rather than carrying a callback each.
+  /// Shop Branding is built; the rest still say so plainly.
+  void _openModule(String module) {
+    if (module == 'Shop Branding') {
+      widget.onShopBranding();
+      return;
+    }
+    _comingSoon(module);
   }
 
   void _comingSoon(String module) {

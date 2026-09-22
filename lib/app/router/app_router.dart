@@ -28,6 +28,11 @@ import 'package:cse_b2b/features/complaints/ui/views/notifications_screen.dart';
 import 'package:cse_b2b/features/chat/data/http_chat_repository.dart';
 import 'package:cse_b2b/features/chat/ui/views/conversation_screen.dart';
 import 'package:cse_b2b/features/chat/ui/views/new_conversation_screen.dart';
+import 'package:cse_b2b/features/branding/data/branding_service.dart';
+import 'package:cse_b2b/features/branding/ui/views/branding_requests_screen.dart';
+import 'package:cse_b2b/features/branding/ui/views/branding_status_screen.dart';
+import 'package:cse_b2b/features/branding/ui/views/new_branding_request_screen.dart';
+import 'package:cse_b2b/features/branding/ui/views/shop_branding_screen.dart';
 import 'package:cse_b2b/features/inaam_baazar/data/inaam_service.dart';
 import 'package:cse_b2b/features/points/data/points_service.dart';
 import 'package:cse_b2b/features/points/ui/views/points_ledger_screen.dart';
@@ -135,6 +140,15 @@ abstract final class AppRoutes {
   static const sendPoints = '/points/send';
   static const targets = '/points/targets';
   static const pointsLedger = '/points/ledger';
+
+  /// Shop Branding: the module landing, the request wizard, the history and
+  /// one request. A request's path carries its reference, so the landing and
+  /// the history can both lead to the same screen.
+  static const branding = '/branding';
+  static const newBranding = '/branding/new';
+  static const brandingRequests = '/branding/requests';
+  static String brandingRequest(String reference) =>
+      '/branding/requests/$reference';
 
   /// Where a submitted registration waits for its three approvals.
   static const approval = '/approval';
@@ -268,6 +282,11 @@ GoRouter createAppRouter({
   // forgotten on restart would be worse than one that plainly fails.
   final inaam = InaamService(baseUrl: apiBaseUrl);
 
+  // Shop Branding decides nothing on the device: which board types a partner
+  // may ask for is measured server-side against their role, points, scheme,
+  // recent scanning and existing board.
+  final branding = BrandingService(baseUrl: apiBaseUrl);
+
   final space = _serverBacked
       ? HttpSpaceRepository(baseUrl: apiBaseUrl)
       : MockSpaceRepository();
@@ -288,6 +307,8 @@ GoRouter createAppRouter({
       Provider<PointsService>.value(value: points),
       Provider<CashRequestsService>.value(value: cashRequests),
       Provider<InaamService>.value(value: inaam),
+      Provider<BrandingService>.value(value: branding),
+      Provider<MediaCaptureService>.value(value: capture),
       Provider<ComplaintsService>.value(value: complaints),
       ChangeNotifierProvider<PinLock>.value(value: pinLock),
     ],
@@ -457,6 +478,7 @@ GoRouter createAppRouter({
                   context.push(AppRoutes.conversation, extra: party),
               onOpenPost: (post) => context.push(AppRoutes.post, extra: post),
               onOpenSetting: (route) => context.push<void>(route),
+              onShopBranding: () => context.push<void>(AppRoutes.branding),
             ),
           ),
         ),
@@ -502,6 +524,50 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.scan,
         builder: (context, state) => signedIn(const ScanScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.branding,
+        builder: (context, state) => signedIn(
+          ShopBrandingScreen(
+            onNewRequest: () => context.push<void>(AppRoutes.newBranding),
+            onSeeAll: () => context.push<void>(AppRoutes.brandingRequests),
+            onOpenRequest: (reference) =>
+                context.push<void>(AppRoutes.brandingRequest(reference)),
+          ),
+        ),
+        routes: [
+          // Both declared before ':reference', which would otherwise match
+          // "new" and "requests" as a reference.
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => signedIn(
+              NewBrandingRequestScreen(
+                onOpenScanner: () => context.push<void>(AppRoutes.scan),
+              ),
+            ),
+          ),
+          GoRoute(
+            path: 'requests',
+            builder: (context, state) => signedIn(
+              BrandingRequestsScreen(
+                onOpenRequest: (reference) =>
+                    context.push<void>(AppRoutes.brandingRequest(reference)),
+              ),
+            ),
+            routes: [
+              GoRoute(
+                path: ':reference',
+                builder: (context, state) => signedIn(
+                  BrandingStatusScreen(
+                    reference: state.pathParameters['reference']!,
+                    onNewRequest: () =>
+                        context.push<void>(AppRoutes.newBranding),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.complaints,

@@ -1,163 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/ui/ds.dart';
 import '../../../home/ui/models/home_demo_data.dart';
-
-/// The prize wheel, drawn as the design shows it: eight segments, the value
-/// on each, and a pointer at the top. Nothing about weighting or odds is
-/// exposed, because the user cannot influence them.
-class SpinWheel extends StatelessWidget {
-  const SpinWheel({super.key, this.size = 260, this.values});
-
-  final double size;
-
-  /// The segment labels. Null keeps the design's own eight, so the boards are
-  /// unchanged; the live screen passes what Crown Solar configured.
-  final List<String>? values;
-
-  static const _defaults = [
-    '50',
-    '50',
-    '50',
-    '500',
-    '50',
-    '50',
-    '50',
-    '50,000',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final given = values;
-    final labels = (given == null || given.isEmpty) ? _defaults : given;
-
-    // The biggest prize on the wheel is the one in Crown red, whatever it
-    // happens to be — the colour follows the configuration, not a constant.
-    final most = (List<String>.of(
-      labels,
-    )..sort((a, b) => a.length - b.length)).last;
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: context.palette.crownGold, width: 6),
-              color: context.colors.surface,
-            ),
-            child: CustomPaint(
-              painter: _WheelPainter(
-                segments: labels.length,
-                line: context.colors.outline,
-                highlight: context.palette.accentSoft,
-              ),
-              child: Stack(
-                children: [
-                  for (var i = 0; i < labels.length; i++)
-                    Align(
-                      alignment: Alignment(
-                        0.62 * _unit(i, labels.length).dx,
-                        0.62 * _unit(i, labels.length).dy,
-                      ),
-                      child: Text(
-                        labels[i],
-                        style: TextStyle(
-                          fontSize: labels[i].length > 3 ? 13 : 15,
-                          fontWeight: FontWeight.w600,
-                          color: labels[i] == most
-                              ? context.palette.crownRed
-                              : context.colors.onSurface,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            width: 52,
-            height: 52,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: context.colors.primary,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              LucideIcons.sparkles,
-              size: 24,
-              color: Colors.white,
-            ),
-          ),
-          Positioned(
-            top: -6,
-            child: Icon(
-              LucideIcons.triangle,
-              size: 22,
-              color: context.palette.crownRed,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// The unit vector pointing at the middle of segment [i] of [n].
-  static Offset _unit(int i, int n) {
-    final angle = (i + 0.5) * (2 * math.pi / n) - math.pi / 2;
-    return Offset(math.cos(angle), math.sin(angle));
-  }
-}
-
-class _WheelPainter extends CustomPainter {
-  _WheelPainter({
-    required this.segments,
-    required this.line,
-    required this.highlight,
-  });
-
-  final int segments;
-  final Color line;
-  final Color highlight;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centre = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-    final stroke = Paint()
-      ..color = line
-      ..strokeWidth = 1;
-    final fill = Paint()..color = highlight;
-
-    for (var i = 0; i < segments; i++) {
-      final start = i * (2 * math.pi / segments) - math.pi / 2;
-      final sweep = 2 * math.pi / segments;
-      if (i.isEven) {
-        canvas.drawArc(
-          Rect.fromCircle(center: centre, radius: radius),
-          start,
-          sweep,
-          true,
-          fill,
-        );
-      }
-      canvas.drawLine(
-        centre,
-        centre + Offset(radius * math.cos(start), radius * math.sin(start)),
-        stroke,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+import '../widgets/inaam_widgets.dart';
 
 /// Board 09 · A1 — Inaam hub: spins waiting, how the next one is earned, and
 /// the wheel itself.
@@ -173,115 +19,96 @@ class InaamHubScreen extends StatelessWidget {
       ),
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        child: Column(
           children: [
-            const DsSegmentedControl(
-              options: ['Spin and Win', 'Reward Program', 'Item Scheme'],
-              value: 'Spin and Win',
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.screenPadding,
+                10,
+                AppSpacing.screenPadding,
+                0,
+              ),
+              child: DsTabs(
+                tabs: ['Spin and Win', 'Reward Program', 'Item Scheme'],
+                value: 'Spin and Win',
+              ),
             ),
-            const SizedBox(height: AppSpacing.md),
-            DsCard(
-              tone: DsCardTone.accent,
-              child: Row(
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenPadding,
+                  AppSpacing.md,
+                  AppSpacing.screenPadding,
+                  AppSpacing.stepLg,
+                ),
                 children: [
-                  Expanded(
+                  const InaamSpinsCard(
+                    spins: 2,
+                    scansToday: 24,
+                    scansTarget: 30,
+                    progress: 0.8,
+                    note:
+                        '6 more scans earns another spin. There is no limit '
+                        'on how many you can earn in a day.',
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  DsCard(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        const InaamSpinWheel(),
+                        const SizedBox(height: 14),
                         Text(
-                          'SPINS AVAILABLE',
+                          'Prizes range from Rs. 50 to Rs. 50,000 and are '
+                          'credited to your wallet.',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 11,
-                            letterSpacing: 0.06 * 11,
-                            fontWeight: FontWeight.w600,
-                            color: context.colors.primary,
+                            fontSize: 13,
+                            height: 19 / 13,
+                            color: context.colors.onSurfaceVariant,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              '2',
-                              style: TextStyle(
-                                fontSize: 34,
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.primary,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            const Flexible(
-                              child: DsBody('spins ready to use', size: 14),
-                            ),
-                          ],
-                        ),
+                        const SizedBox(height: 14),
+                        DsButton(label: 'Spin Now', onPressed: () {}),
                       ],
                     ),
                   ),
-                  const DsTag(label: 'Today', tone: DsTone.accent),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.stepMd),
-            DsCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                  const SizedBox(height: AppSpacing.md),
                   Row(
                     children: [
-                      Expanded(
+                      const Expanded(
                         child: Text(
-                          'Scans today',
-                          style: context.texts.bodyMedium?.copyWith(
+                          'Spin history',
+                          style: TextStyle(
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                      const DsCaption('24 of 30 for the next spin'),
+                      Text(
+                        'See all',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.primary,
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  const DsProgressBar(value: 24 / 30),
-                  const SizedBox(height: 10),
-                  const DsCaption(
-                    '6 more scans earns another spin. There is no limit on how '
-                    'many you can earn in a day.',
+                  const SizedBox(height: AppSpacing.md),
+                  const DsCard(
+                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                    child: Column(
+                      children: [
+                        InaamSpinRow(prize: 'Rs. 50', when: 'Today, 5:31 PM'),
+                        InaamSpinRow(prize: 'Rs. 200', when: '07 Sep, 7:14 PM'),
+                        InaamSpinRow(
+                          prize: 'Rs. 1,000',
+                          when: '05 Sep, 4:48 PM',
+                          last: true,
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const Center(child: SpinWheel()),
-            const SizedBox(height: AppSpacing.md),
-            const DsCaption(
-              'Prizes range from Rs. 50 to Rs. 50,000 and are credited to your '
-              'wallet.',
-              align: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            DsButton(
-              label: 'Spin Now',
-              icon: LucideIcons.sparkles,
-              onPressed: () {},
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            DsSectionHeader(
-              title: 'Spin history',
-              actionLabel: 'See all',
-              onAction: () {},
-            ),
-            DsCard(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              child: Column(
-                children: const [
-                  _SpinRow(prize: 'Rs. 50', when: 'Today, 5:31 PM'),
-                  DsHairline(),
-                  _SpinRow(prize: 'Rs. 200', when: '07 Sep, 7:14 PM'),
-                  DsHairline(),
-                  _SpinRow(prize: 'Rs. 1,000', when: '05 Sep, 4:48 PM'),
                 ],
               ),
             ),
@@ -296,28 +123,6 @@ class InaamHubScreen extends StatelessWidget {
   }
 }
 
-class _SpinRow extends StatelessWidget {
-  const _SpinRow({required this.prize, required this.when});
-
-  final String prize;
-  final String when;
-
-  @override
-  Widget build(BuildContext context) {
-    return DsSettingRow(
-      label: prize,
-      meta: when,
-      leading: const DsIconMedallion(
-        icon: LucideIcons.sparkles,
-        tone: DsTone.solar,
-        size: 34,
-        iconSize: 16,
-      ),
-      trailing: const DsTag(label: 'Credited', tone: DsTone.success),
-    );
-  }
-}
-
 /// Board 09 · A2 — Result: the prize is revealed and credited to the wallet
 /// in the same breath, with the reference for the ledger row.
 class SpinResultScreen extends StatelessWidget {
@@ -325,17 +130,61 @@ class SpinResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DsScreen(
-      padding: const EdgeInsets.all(AppSpacing.screenPadding),
-      gap: AppSpacing.md,
-      footer: DsFooterBar(
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: 26,
+          ),
+          child: Column(
+            children: [
+              const InaamSpinWheel(
+                size: 216,
+                centre: InaamWheelPrize(amount: 'Rs. 50'),
+              ),
+              const SizedBox(height: AppSpacing.cardPadding),
+              const Text(
+                'Rs. 50 added to your wallet',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  height: 28 / 22,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.02 * 22,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const DsBody(
+                'Your balance is now PKR 184,550. Ref SPN-2026-44192 · '
+                'Today, 5:31 PM',
+                size: 14,
+                align: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.cardPadding),
+              const DsCard(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Column(
+                  children: [
+                    InaamSpinRow(prize: 'Rs. 50', when: 'Today, 5:31 PM'),
+                    InaamSpinRow(prize: 'Rs. 50', when: 'Yesterday, 6:02 PM'),
+                    InaamSpinRow(prize: 'Rs. 200', when: '07 Sep, 7:14 PM'),
+                    InaamSpinRow(
+                      prize: 'Rs. 1,000',
+                      when: '05 Sep, 4:48 PM',
+                      last: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: DsFooterBar(
         child: Column(
           children: [
-            DsButton(
-              label: 'Use Your Second Spin',
-              icon: LucideIcons.sparkles,
-              onPressed: () {},
-            ),
+            DsButton(label: 'Use Your Second Spin', onPressed: () {}),
             const SizedBox(height: 10),
             DsButton(
               label: 'Done',
@@ -345,46 +194,6 @@ class SpinResultScreen extends StatelessWidget {
           ],
         ),
       ),
-      sections: [
-        const Center(child: SpinWheel(size: 200)),
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.stepLg),
-          decoration: BoxDecoration(
-            color: context.status.successFill,
-            borderRadius: AppRadii.heroRadius,
-          ),
-          child: Column(
-            children: [
-              Text(
-                'YOU WON',
-                style: TextStyle(
-                  fontSize: 12,
-                  letterSpacing: 0.06 * 12,
-                  fontWeight: FontWeight.w600,
-                  color: context.status.success,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Rs. 50',
-                style: TextStyle(
-                  fontSize: 38,
-                  height: 44 / 38,
-                  fontWeight: FontWeight.w600,
-                  color: context.status.success,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              DsBody(
-                'Rs. 50 added to your wallet. Your balance is now PKR 184,550. '
-                'Ref SPN-2026-44192 · Today, 5:31 PM',
-                align: TextAlign.center,
-                color: context.status.success,
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -402,12 +211,12 @@ class SpinUnavailableScreen extends StatelessWidget {
         onBack: () => Navigator.of(context).maybePop(),
       ),
       padding: const EdgeInsets.all(AppSpacing.screenPadding),
-      gap: AppSpacing.md,
+      gap: 14,
       sections: [
         DsCard(
           padding: EdgeInsets.zero,
           child: DsEmptyState(
-            icon: LucideIcons.sparkles,
+            icon: LucideIcons.scanLine,
             title: 'No Spins Right Now',
             message:
                 'You have 4 scans today. Reach 10 scans in one day to earn a '
@@ -416,14 +225,44 @@ class SpinUnavailableScreen extends StatelessWidget {
             onAction: () {},
           ),
         ),
-        const DsNotice(
-          icon: LucideIcons.circleCheck,
-          title: 'This spin has already been used',
-          message:
-              'You won Rs. 50 on it at 5:31 PM yesterday. It cannot be spun '
-              'again.',
+        DsCard(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const DsIconMedallion(
+                icon: LucideIcons.circleCheck,
+                tone: DsTone.neutral,
+              ),
+              const SizedBox(width: AppSpacing.stepMd),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'This spin has already been used',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'You won Rs. 50 on it at 5:31 PM yesterday. It cannot '
+                      'be spun again.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 19 / 13,
+                        color: context.colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         DsCard(
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -431,29 +270,33 @@ class SpinUnavailableScreen extends StatelessWidget {
                 children: [
                   const DsIconMedallion(
                     icon: LucideIcons.wifiOff,
-                    tone: DsTone.warning,
+                    tone: DsTone.neutral,
                   ),
                   const SizedBox(width: 10),
-                  Expanded(
+                  const Expanded(
                     child: Text(
                       'Spin could not be completed',
-                      style: context.texts.bodyLarge?.copyWith(
-                        fontSize: 15,
+                      style: TextStyle(
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.stepMd),
-              const DsBody(
-                'The connection dropped mid-spin. Your spin has not been used. '
-                'Try again when you have signal.',
+              const SizedBox(height: 10),
+              Text(
+                'The connection dropped mid-spin. Your spin has not been '
+                'used. Try again when you have signal.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 19 / 13,
+                  color: context.colors.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(height: AppSpacing.stepMd),
+              const SizedBox(height: 10),
               DsButton(
                 label: 'Try Again',
-                variant: DsButtonVariant.secondary,
                 size: DsButtonSize.sm,
                 icon: LucideIcons.refreshCw,
                 onPressed: () {},
