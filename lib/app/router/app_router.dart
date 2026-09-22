@@ -253,39 +253,52 @@ GoRouter createAppRouter({
   final chat = _serverBacked
       ? HttpChatRepository(baseUrl: apiBaseUrl)
       : MockChatRepository();
-  // Profile settings are database-backed only: a setting that is forgotten
-  // on restart is worse than one that plainly fails.
-  final profileSettings = ProfileSettingsService(baseUrl: apiBaseUrl);
+  // Profile settings, kept on the database when there is one. The mock holds
+  // them for the life of the process, which is all a server-less build can.
+  final profileSettings = _serverBacked
+      ? HttpProfileSettingsService(baseUrl: apiBaseUrl)
+      : MockProfileSettingsService();
   final pinLock = PinLock();
 
-  // Complaints and notifications are database-backed only, for the same
-  // reason the profile settings are: a ticket that exists until the app
-  // restarts is worse than one that plainly fails to be raised.
-  final complaints = ComplaintsService(baseUrl: apiBaseUrl);
+  // Complaints and notifications. A ticket raised against the mock lasts as
+  // long as the process does; against the database it outlives a restart.
+  final complaints = _serverBacked
+      ? HttpComplaintsService(baseUrl: apiBaseUrl)
+      : MockComplaintsService();
 
-  // The buying source's side of a registration. Database-backed only: a
-  // verdict on someone else's livelihood that is forgotten on restart is
-  // worse than one that plainly fails to be recorded.
-  final profileRequests = ProfileRequestsService(baseUrl: apiBaseUrl);
+  // The buying source's side of a registration. A verdict recorded against
+  // the mock is remembered only while the process runs.
+  final profileRequests = _serverBacked
+      ? HttpProfileRequestsService(baseUrl: apiBaseUrl)
+      : MockProfileRequestsService();
 
-  // Points are database-backed only. They arrive at once and cannot be
-  // recalled, so a transfer remembered only until the app restarts would be
-  // worse than one that plainly fails.
-  final points = PointsService(baseUrl: apiBaseUrl);
+  // Points. Every figure is derived from the movements either way, so the
+  // mock and the database answer the same question the same way.
+  final points = _serverBacked
+      ? HttpPointsService(baseUrl: apiBaseUrl)
+      : MockPointsService();
 
-  // The receiver's side of a transfer. Database-backed only: a verdict that
-  // moves someone else's money and is forgotten on restart is worse than
-  // one that plainly fails.
-  final cashRequests = CashRequestsService(baseUrl: apiBaseUrl);
+  // The receiver's side of a transfer. A verdict against the mock lasts as
+  // long as the process does.
+  final cashRequests = _serverBacked
+      ? HttpCashRequestsService(baseUrl: apiBaseUrl)
+      : MockCashRequestsService();
 
-  // Inaam prizes are money. Database-backed only: a spin whose winnings are
-  // forgotten on restart would be worse than one that plainly fails.
-  final inaam = InaamService(baseUrl: apiBaseUrl);
+  // Inaam prizes are money. The mock credits the same wallet the wheel is
+  // spun against, so a prize shown is a prize in the balance.
+  final inaam = _serverBacked
+      ? HttpInaamService(baseUrl: apiBaseUrl)
+      : MockInaamService(
+          scans: scanner as MockScanRepository,
+          wallet: wallet as MockWalletRepository,
+        );
 
   // Shop Branding decides nothing on the device: which board types a partner
   // may ask for is measured server-side against their role, points, scheme,
   // recent scanning and existing board.
-  final branding = BrandingService(baseUrl: apiBaseUrl);
+  final branding = _serverBacked
+      ? HttpBrandingService(baseUrl: apiBaseUrl)
+      : MockBrandingService(points: points as MockPointsService);
 
   final space = _serverBacked
       ? HttpSpaceRepository(baseUrl: apiBaseUrl)

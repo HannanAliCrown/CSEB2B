@@ -7,6 +7,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../core/mock/partner_directory.dart';
+
 /// Someone who named this partner as their buying source, waiting to be
 /// verified.
 class ProfileRequest {
@@ -80,22 +82,46 @@ class ProfileRequest {
   );
 }
 
+/// The buying source's side of a registration.
+///
+/// [HttpProfileRequestsService] reads the database behind `prototype_server`.
+/// [MockProfileRequestsService] holds the same application in memory, so a
+/// build with no server running opens on the inbox the database shows.
+abstract interface class ProfileRequestsService {
+  /// The requests waiting on this partner. Null when they could not be read
+  /// — which the screen says, rather than showing an empty inbox.
+  Future<List<ProfileRequest>?> pending(String mobileNumber);
+
+  /// How many are waiting, for the badge on Home. Zero when unreachable: a
+  /// badge is a nudge, not a fact worth an error.
+  Future<int> outstandingCount(String mobileNumber);
+
+  /// The bands to choose from before approving anyone. Reference data, so
+  /// the figures are Crown Solar's rather than the screen's.
+  Future<List<ExpectedPurchase>> expectedPurchases();
+
+  /// Records this partner's verdict. Approving needs an expected purchase;
+  /// rejecting needs a reason. Null means it was recorded.
+  Future<ProfileDecisionFailure?> decide({
+    required String mobileNumber,
+    required String applicationId,
+    required bool approved,
+    String? expectedPurchaseId,
+    String? note,
+  });
+}
+
 /// The buying source's side of a registration, backed by the database behind
 /// `prototype_server`.
-///
-/// There is deliberately no in-memory implementation. A verdict on someone
-/// else's livelihood that is forgotten when the app restarts is worse than
-/// one that plainly fails to be recorded.
-class ProfileRequestsService {
-  ProfileRequestsService({required String baseUrl, http.Client? client})
+class HttpProfileRequestsService implements ProfileRequestsService {
+  HttpProfileRequestsService({required String baseUrl, http.Client? client})
     : _baseUrl = baseUrl,
       _client = client ?? http.Client();
 
   final String _baseUrl;
   final http.Client _client;
 
-  /// The requests waiting on this partner. Null when the server could not be
-  /// reached — which the screen says, rather than showing an empty inbox.
+  @override
   Future<List<ProfileRequest>?> pending(String mobileNumber) async {
     try {
       final response = await _client.get(
@@ -114,13 +140,11 @@ class ProfileRequestsService {
     }
   }
 
-  /// How many are waiting, for the badge on Home. Zero when unreachable: a
-  /// badge is a nudge, not a fact worth an error.
+  @override
   Future<int> outstandingCount(String mobileNumber) async =>
       (await pending(mobileNumber))?.length ?? 0;
 
-  /// The bands to choose from before approving anyone. Reference data, so
-  /// the figures are Crown Solar's rather than the screen's.
+  @override
   Future<List<ExpectedPurchase>> expectedPurchases() async {
     try {
       final response = await _client.get(
@@ -138,8 +162,7 @@ class ProfileRequestsService {
     }
   }
 
-  /// Records this partner's verdict. Approving needs an expected purchase;
-  /// rejecting needs a reason. Null means it was recorded.
+  @override
   Future<ProfileDecisionFailure?> decide({
     required String mobileNumber,
     required String applicationId,
@@ -173,6 +196,114 @@ class ProfileRequestsService {
       'not_outstanding' => ProfileDecisionFailure.notOutstanding,
       _ => ProfileDecisionFailure.unreachable,
     };
+  }
+}
+
+/// The buying source's side of a registration, held in memory.
+///
+/// The one application `db/seed/006_cash_and_scan.sql` submits, named against
+/// the buying source that `db/seed/008_profile_requests_and_cash_requests.sql`
+/// completes. A verdict lasts as long as the process does, which is what a
+/// build with no database can offer.
+class MockProfileRequestsService implements ProfileRequestsService {
+  MockProfileRequestsService() : _seededAt = DateTime.now();
+
+  /// The seed submits its application an interval before `now()`. Holding
+  /// that moment keeps `submittedAt` still while the app runs.
+  final DateTime _seededAt;
+
+  /// Set once this partner has decided, which takes the application out of
+  /// the inbox: this is not a history screen.
+  bool _decided = false;
+
+  /// The buying source the seeded application names.
+  static const _verifierNumber = '3007781204';
+
+  static const _applicationId = 'CSE-5560071';
+
+  /// The bands `008` seeds, in the order `position` gives them.
+  static const _bands = <ExpectedPurchase>[
+    ExpectedPurchase(id: 'band-0', label: 'Up to PKR 100,000 a month'),
+    ExpectedPurchase(id: 'band-1', label: 'PKR 100,000 — 300,000 a month'),
+    ExpectedPurchase(id: 'band-2', label: 'PKR 300,000 — 700,000 a month'),
+    ExpectedPurchase(id: 'band-3', label: 'PKR 700,000 — 1,500,000 a month'),
+    ExpectedPurchase(id: 'band-4', label: 'Over PKR 1,500,000 a month'),
+  ];
+
+  /// What the applicant submitted, ordered by kind then slot as the query
+  /// orders it, and without the CNIC images the query never selects.
+  static const _media = <ProfileRequestItem>[
+    ProfileRequestItem(kind: 'selfie'),
+    ProfileRequestItem(kind: 'shop_image', slot: 'Shop Board'),
+    ProfileRequestItem(kind: 'shop_image', slot: 'Shop Stock'),
+    ProfileRequestItem(
+      kind: 'video_link',
+      slot: '1',
+      linkUrl: 'https://youtu.be/cs-install-8841',
+    ),
+    ProfileRequestItem(
+      kind: 'video_link',
+      slot: '2',
+      linkUrl: 'https://youtu.be/cs-install-9120',
+    ),
+  ];
+
+  @override
+  Future<List<ProfileRequest>?> pending(String mobileNumber) async {
+    if (PartnerDirectory.find(mobileNumber) == null) return null;
+    if (PartnerDirectory.normalise(mobileNumber) != _verifierNumber ||
+        _decided) {
+      return const <ProfileRequest>[];
+    }
+
+    return [
+      ProfileRequest(
+        applicationId: _applicationId,
+        reference: 'CSE-5560071',
+        mobileNumber: '3339912004',
+        contactName: 'Kamran Abbas',
+        businessName: 'Kamran Solar Services',
+        role: 'installer',
+        businessAddress: 'Shop 14, Bilal Market, Shahdara',
+        marketName: 'Ravi Road, Lahore',
+        submittedAt: _seededAt.subtract(const Duration(hours: 19)),
+        // The second buying source the applicant named, which is every
+        // source but the one reading this screen.
+        otherBuyingSources: const ['Hamza Solar House'],
+        media: _media,
+      ),
+    ];
+  }
+
+  @override
+  Future<int> outstandingCount(String mobileNumber) async =>
+      (await pending(mobileNumber))?.length ?? 0;
+
+  @override
+  Future<List<ExpectedPurchase>> expectedPurchases() async => _bands;
+
+  @override
+  Future<ProfileDecisionFailure?> decide({
+    required String mobileNumber,
+    required String applicationId,
+    required bool approved,
+    String? expectedPurchaseId,
+    String? note,
+  }) async {
+    if (approved && expectedPurchaseId == null) {
+      return ProfileDecisionFailure.expectationMissing;
+    }
+    if (!approved && (note == null || note.trim().isEmpty)) {
+      return ProfileDecisionFailure.reasonMissing;
+    }
+    if (PartnerDirectory.normalise(mobileNumber) != _verifierNumber ||
+        applicationId != _applicationId ||
+        _decided) {
+      return ProfileDecisionFailure.notOutstanding;
+    }
+
+    _decided = true;
+    return null;
   }
 }
 

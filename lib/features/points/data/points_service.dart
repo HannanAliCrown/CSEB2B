@@ -7,6 +7,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../core/mock/partner_directory.dart';
+
 /// What put a line in the points ledger.
 enum PointEntryType {
   /// SAP posting one percent of a purchase.
@@ -405,31 +407,58 @@ class PointTransferReceipt {
   final DateTime sentAt;
 }
 
-/// Points' data boundary, backed by the database behind `prototype_server`.
+/// Points' data boundary.
 ///
-/// There is deliberately no in-memory implementation. Points arrive at once
-/// and cannot be recalled, so a transfer that is only remembered until the
-/// app restarts would be worse than one that plainly fails.
-class PointsService {
-  PointsService({required String baseUrl, http.Client? client})
+/// [HttpPointsService] reads the database behind `prototype_server`.
+/// [MockPointsService] holds the same movements in memory and derives the
+/// balance, the ledger and every target from them, exactly as the database
+/// does — nothing here is a stored total.
+abstract interface class PointsService {
+  /// The balance and every movement. Null when it could not be read — which
+  /// the screen says, rather than showing a balance of zero.
+  Future<PointsLedger?> ledger(String mobileNumber);
+
+  Future<PointTargets?> targets(String mobileNumber);
+
+  Future<List<PointRecipient>?> recipients(String mobileNumber);
+
+  /// Resolves a number from a contact or a scanned QR code. Null when this
+  /// partner may not send to them.
+  Future<PointRecipient?> lookup({
+    required String mobileNumber,
+    required String recipientNumber,
+  });
+
+  /// Sends points. They arrive at once.
+  Future<(PointTransferReceipt?, PointTransferFailure?)> send({
+    required String fromMobileNumber,
+    required String toMobileNumber,
+    required int amount,
+  });
+}
+
+/// Points' data boundary, backed by the database behind `prototype_server`.
+class HttpPointsService implements PointsService {
+  HttpPointsService({required String baseUrl, http.Client? client})
     : _baseUrl = baseUrl,
       _client = client ?? http.Client();
 
   final String _baseUrl;
   final http.Client _client;
 
-  /// The balance and every movement. Null when the server was unreachable —
-  /// which the screen says, rather than showing a balance of zero.
+  @override
   Future<PointsLedger?> ledger(String mobileNumber) async {
     final body = await _get('/points/ledger', {'mobileNumber': mobileNumber});
     return body == null ? null : PointsLedger.fromJson(body);
   }
 
+  @override
   Future<PointTargets?> targets(String mobileNumber) async {
     final body = await _get('/points/targets', {'mobileNumber': mobileNumber});
     return body == null ? null : PointTargets.fromJson(body);
   }
 
+  @override
   Future<List<PointRecipient>?> recipients(String mobileNumber) async {
     final body = await _get('/points/recipients', {
       'mobileNumber': mobileNumber,
@@ -441,8 +470,7 @@ class PointsService {
     ];
   }
 
-  /// Resolves a number from a contact or a scanned QR code. Null when this
-  /// partner may not send to them.
+  @override
   Future<PointRecipient?> lookup({
     required String mobileNumber,
     required String recipientNumber,
@@ -454,7 +482,7 @@ class PointsService {
     return body == null ? null : PointRecipient.fromJson(body);
   }
 
-  /// Sends points. They arrive at once.
+  @override
   Future<(PointTransferReceipt?, PointTransferFailure?)> send({
     required String fromMobileNumber,
     required String toMobileNumber,
@@ -516,6 +544,707 @@ class PointsService {
     } on Object {
       return null;
     }
+  }
+}
+
+/// One row of `point_entries`, as the seed writes it.
+///
+/// A movement, never a balance: every figure the app shows is derived from
+/// these, so holding a total here would be holding a lie.
+class _Movement {
+  _Movement({
+    required this.number,
+    required this.reference,
+    required this.type,
+    required this.amount,
+    required this.credit,
+    required this.postedAt,
+    this.counterpartyNumber,
+    this.sapDocument,
+    this.note,
+  });
+
+  /// The account the movement belongs to, in ten national digits.
+  final String number;
+
+  final String reference;
+  final PointEntryType type;
+  final int amount;
+  final bool credit;
+  final DateTime postedAt;
+  final String? counterpartyNumber;
+  final String? sapDocument;
+  final String? note;
+
+  /// What a target counts: points that arrived, less what SAP took back.
+  /// Points sent out reduce the balance and are deliberately absent.
+  int get counting => switch (type) {
+    PointEntryType.purchaseAccrual || PointEntryType.transferIn => amount,
+    PointEntryType.reversal => -amount,
+    _ => 0,
+  };
+
+  int get signed => credit ? amount : -amount;
+}
+
+/// One four-month or year-long window a partner is measured against.
+class _SeededTarget {
+  const _SeededTarget({
+    required this.label,
+    required this.startsOn,
+    required this.endsOn,
+    required this.targetPoints,
+    this.prize,
+  });
+
+  final String label;
+  final DateTime startsOn;
+  final DateTime endsOn;
+  final int targetPoints;
+  final String? prize;
+}
+
+/// One scheme, signed on paper.
+class _SeededScheme {
+  const _SeededScheme({
+    required this.name,
+    required this.year,
+    required this.annualTargetPoints,
+    required this.annualPrize,
+    required this.periods,
+    this.grandPrize,
+  });
+
+  final String name;
+  final int year;
+  final int annualTargetPoints;
+  final String annualPrize;
+  final String? grandPrize;
+  final List<_SeededTarget> periods;
+}
+
+/// Points' data boundary, held in memory.
+///
+/// Every movement `db/seed/007_points_and_targets.sql` writes, with the
+/// balance, the ledger, each target and the breakdown derived from them the
+/// way the database derives them. A transfer made here lasts as long as the
+/// process does, which is what a build with no database can offer.
+class MockPointsService implements PointsService {
+  MockPointsService() {
+    _movements.addAll(_seededMovements());
+  }
+
+  final List<_Movement> _movements = [];
+
+  /// `point_reference_seq` starts here, and every seeded SAP movement takes
+  /// one before the first transfer does.
+  int _nextReference = 77411 + 9;
+
+  static const _retailerScheme = 'Retailer Scheme';
+  static const _wholesalerScheme = 'Wholesaler Scheme';
+  static const _distributorScheme = 'Distributor Scheme';
+
+  /// Which scheme each partner signed. Bilal Traders is deliberately absent:
+  /// a partner with no scheme is a state the app has to show.
+  static const _schemeByNumber = <String, String>{
+    '3007781204': _retailerScheme,
+    '3014429911': _wholesalerScheme,
+    '3028890143': _distributorScheme,
+  };
+
+  static final _schemes = <String, _SeededScheme>{
+    _retailerScheme: _SeededScheme(
+      name: _retailerScheme,
+      year: 2026,
+      annualTargetPoints: 1000000,
+      annualPrize: 'Umrah package for two',
+      periods: [
+        _SeededTarget(
+          label: 'Jan — Apr 2026',
+          startsOn: DateTime(2026),
+          endsOn: DateTime(2026, 4, 30),
+          targetPoints: 280000,
+          prize: '32-inch LED television',
+        ),
+        _SeededTarget(
+          label: 'May — Aug 2026',
+          startsOn: DateTime(2026, 5),
+          endsOn: DateTime(2026, 8, 31),
+          targetPoints: 320000,
+          prize: 'Haier 1-ton inverter AC',
+        ),
+        _SeededTarget(
+          label: 'Sep — Dec 2026',
+          startsOn: DateTime(2026, 9),
+          endsOn: DateTime(2026, 12, 31),
+          targetPoints: 400000,
+          prize: 'Honda 125 motorcycle',
+        ),
+      ],
+    ),
+    _wholesalerScheme: _SeededScheme(
+      name: _wholesalerScheme,
+      year: 2026,
+      annualTargetPoints: 1000000,
+      annualPrize: 'Umrah package for two',
+      grandPrize: 'Foreign tour for two, for hitting every four-month target',
+      periods: [
+        _SeededTarget(
+          label: 'Jan — Apr 2026',
+          startsOn: DateTime(2026),
+          endsOn: DateTime(2026, 4, 30),
+          targetPoints: 280000,
+          prize: '32-inch LED television',
+        ),
+        _SeededTarget(
+          label: 'May — Aug 2026',
+          startsOn: DateTime(2026, 5),
+          endsOn: DateTime(2026, 8, 31),
+          targetPoints: 320000,
+          prize: 'Honda 125 motorcycle',
+        ),
+        _SeededTarget(
+          label: 'Sep — Dec 2026',
+          startsOn: DateTime(2026, 9),
+          endsOn: DateTime(2026, 12, 31),
+          targetPoints: 400000,
+          prize: 'Gold coin, 2 tola',
+        ),
+      ],
+    ),
+    _distributorScheme: _SeededScheme(
+      name: _distributorScheme,
+      year: 2026,
+      annualTargetPoints: 5000000,
+      annualPrize: 'Hajj package for two',
+      periods: [
+        _SeededTarget(
+          label: 'Jan — Apr 2026',
+          startsOn: DateTime(2026),
+          endsOn: DateTime(2026, 4, 30),
+          targetPoints: 1200000,
+          prize: 'Toyota Hilux service package',
+        ),
+        _SeededTarget(
+          label: 'May — Aug 2026',
+          startsOn: DateTime(2026, 5),
+          endsOn: DateTime(2026, 8, 31),
+          targetPoints: 1400000,
+          prize: 'Foreign tour for two',
+        ),
+        _SeededTarget(
+          label: 'Sep — Dec 2026',
+          startsOn: DateTime(2026, 9),
+          endsOn: DateTime(2026, 12, 31),
+          targetPoints: 1600000,
+          prize: 'Gold coin, 5 tola',
+        ),
+      ],
+    ),
+  };
+
+  /// Targets Crown Solar set by hand for Hamza, who reached the year total
+  /// in August. They run alongside the signed scheme.
+  static final _extraTargets = <String, List<_SeededTarget>>{
+    '3014429911': [
+      _SeededTarget(
+        label: 'Extra · Jul — Aug 2026',
+        startsOn: DateTime(2026, 7),
+        endsOn: DateTime(2026, 8, 31),
+        targetPoints: 150000,
+        prize: 'Gold coin, 1 tola',
+      ),
+      _SeededTarget(
+        label: 'Extra · Sep — Dec 2026',
+        startsOn: DateTime(2026, 9),
+        endsOn: DateTime(2026, 12, 31),
+        targetPoints: 300000,
+        prize: '32-inch LED television',
+      ),
+      _SeededTarget(
+        label: 'Stretch · Jul — Dec 2026',
+        startsOn: DateTime(2026, 7),
+        endsOn: DateTime(2026, 12, 31),
+        targetPoints: 500000,
+        prize: 'Foreign tour for two',
+      ),
+    ],
+  };
+
+  /// The three trading roles may exchange points in any direction.
+  /// Installers appear nowhere: they hold no points and have no rule row.
+  static const _tradingRoles = {'retailer', 'wholesaler', 'distributor'};
+
+  static List<_Movement> _seededMovements() {
+    // The SAP postings, in the order the seed inserts them. Each takes the
+    // next value of `point_reference_seq`, which starts at 77411.
+    var sequence = 77411;
+    String next() => 'PT-2026-${sequence++}';
+
+    final movements = <_Movement>[
+      for (final row in const [
+        (
+          '3007781204',
+          'purchase_accrual',
+          312600,
+          'INV-71204',
+          2026,
+          2,
+          15,
+          10,
+          20,
+        ),
+        (
+          '3007781204',
+          'purchase_accrual',
+          191900,
+          'INV-74418',
+          2026,
+          6,
+          20,
+          11,
+          5,
+        ),
+        (
+          '3007781204',
+          'purchase_accrual',
+          123500,
+          'INV-76540',
+          2026,
+          9,
+          1,
+          9,
+          30,
+        ),
+        ('3007781204', 'reversal', 4300, 'INV-76980', 2026, 9, 5, 14, 12),
+        (
+          '3007781204',
+          'purchase_accrual',
+          18400,
+          'INV-77213',
+          2026,
+          9,
+          21,
+          6,
+          2,
+        ),
+        (
+          '3014429911',
+          'purchase_accrual',
+          470000,
+          'INV-70880',
+          2026,
+          3,
+          10,
+          9,
+          15,
+        ),
+        (
+          '3014429911',
+          'purchase_accrual',
+          332300,
+          'INV-75012',
+          2026,
+          7,
+          18,
+          15,
+          40,
+        ),
+        (
+          '3028890143',
+          'purchase_accrual',
+          1850000,
+          'INV-72330',
+          2026,
+          4,
+          12,
+          8,
+          50,
+        ),
+      ])
+        _Movement(
+          number: row.$1,
+          reference: next(),
+          type: row.$2 == 'reversal'
+              ? PointEntryType.reversal
+              : PointEntryType.purchaseAccrual,
+          amount: row.$3,
+          credit: row.$2 != 'reversal',
+          sapDocument: row.$4,
+          postedAt: DateTime(row.$5, row.$6, row.$7, row.$8, row.$9),
+        ),
+      // A correction Crown Solar made by hand. The reason travels with it:
+      // a number with no reason is not an answer.
+      _Movement(
+        number: '3007781204',
+        reference: next(),
+        type: PointEntryType.crmAdjustment,
+        amount: 9000,
+        credit: true,
+        note: 'Wrong recipient corrected',
+        postedAt: DateTime(2026, 9, 8, 11, 45),
+      ),
+    ];
+
+    // Both legs of every transfer, exactly as the app writes them: the
+    // sender's debit and the receiver's credit share one reference.
+    for (final row in const [
+      ('PT-2026-77002', '3007781204', '3028890143', 180500, 2026, 5, 10, 10, 0),
+      ('PT-2026-77118', '3007781204', '3014429911', 200000, 2026, 7, 2, 12, 30),
+      ('PT-2026-77260', '3007781204', '3217745002', 6000, 2026, 8, 14, 16, 20),
+      ('PT-2026-77304', '3007781204', '3028890143', 75000, 2026, 8, 21, 9, 10),
+      ('PT-2026-77351', '3007781204', '3014429911', 40000, 2026, 9, 2, 10, 5),
+      ('PT-2026-77366', '3014429911', '3007781204', 19800, 2026, 9, 3, 13, 25),
+      ('PT-2026-77389', '3014429911', '3007781204', 25000, 2026, 9, 7, 17, 40),
+      ('PT-2026-77405', '3007781204', '3217745002', 12000, 2026, 9, 20, 15, 14),
+    ]) {
+      final postedAt = DateTime(row.$5, row.$6, row.$7, row.$8, row.$9);
+      movements
+        ..add(
+          _Movement(
+            number: row.$2,
+            reference: row.$1,
+            type: PointEntryType.transferOut,
+            amount: row.$4,
+            credit: false,
+            counterpartyNumber: row.$3,
+            postedAt: postedAt,
+          ),
+        )
+        ..add(
+          _Movement(
+            number: row.$3,
+            reference: row.$1,
+            type: PointEntryType.transferIn,
+            amount: row.$4,
+            credit: true,
+            counterpartyNumber: row.$2,
+            postedAt: postedAt,
+          ),
+        );
+    }
+    return movements;
+  }
+
+  /// This partner's movements oldest first, which is the order every running
+  /// total is carried in.
+  List<_Movement> _oldestFirst(String number) => [
+    for (final m in _movements)
+      if (m.number == number) m,
+  ]..sort((a, b) => a.postedAt.compareTo(b.postedAt));
+
+  /// The balance, as the sum of what has moved.
+  int balanceOf(String mobileNumber) {
+    final number = PartnerDirectory.normalise(mobileNumber);
+    var balance = 0;
+    for (final movement in _oldestFirst(number)) {
+      balance += movement.signed;
+    }
+    return balance;
+  }
+
+  /// Whether this partner has a scheme, which Shop Branding measures board
+  /// types against.
+  bool schemeSigned(String mobileNumber) =>
+      _schemeByNumber.containsKey(PartnerDirectory.normalise(mobileNumber));
+
+  @override
+  Future<PointsLedger?> ledger(String mobileNumber) async {
+    if (PartnerDirectory.find(mobileNumber) == null) return null;
+    final number = PartnerDirectory.normalise(mobileNumber);
+
+    final entries = <PointEntry>[];
+    var running = 0;
+    for (final movement in _oldestFirst(number)) {
+      running += movement.signed;
+      final counterparty = movement.counterpartyNumber == null
+          ? null
+          : PartnerDirectory.find(movement.counterpartyNumber!);
+      entries.add(
+        PointEntry(
+          reference: movement.reference,
+          type: movement.type,
+          amount: movement.amount,
+          balanceAfter: running,
+          credit: movement.credit,
+          postedAt: movement.postedAt,
+          counterpartyName: counterparty?.displayName,
+          counterpartyRole: counterparty?.role.toLowerCase(),
+          sapDocument: movement.sapDocument,
+          note: movement.note,
+        ),
+      );
+    }
+
+    // Newest first, as the ledger reads.
+    return PointsLedger(
+      balance: running,
+      entries: entries.reversed.toList(),
+      canSend: true,
+    );
+  }
+
+  @override
+  Future<PointTargets?> targets(String mobileNumber) async {
+    if (PartnerDirectory.find(mobileNumber) == null) return null;
+    final number = PartnerDirectory.normalise(mobileNumber);
+
+    final extras = [
+      for (final target in _extraTargets[number] ?? const <_SeededTarget>[])
+        _scored(number, 'extra', target),
+    ];
+
+    // No scheme signed. Points still work; there is simply nothing measured
+    // against this partner, which is what the app then says.
+    final scheme = _schemes[_schemeByNumber[number]];
+    if (scheme == null) {
+      return PointTargets(
+        periods: const [],
+        extras: extras,
+        breakdown: PointBreakdown.empty,
+      );
+    }
+
+    final periods = [
+      for (final period in scheme.periods) _scored(number, 'period', period),
+    ];
+    final annual = _scored(
+      number,
+      'annual',
+      _SeededTarget(
+        label: 'Year total · ${scheme.year}',
+        startsOn: DateTime.utc(scheme.year),
+        endsOn: DateTime.utc(scheme.year, 12, 31),
+        targetPoints: scheme.annualTargetPoints,
+        prize: scheme.annualPrize,
+      ),
+    );
+
+    // The breakdown belongs to whatever is running now — the period the
+    // partner can still do something about. With none running it covers the
+    // year, so the figures are never about a window nobody is in.
+    final now = DateTime.now();
+    PointTarget? running;
+    for (final period in periods) {
+      if (!now.isBefore(period.startsOn) && !now.isAfter(period.endsOn)) {
+        running = period;
+        break;
+      }
+    }
+
+    return PointTargets(
+      schemeName: '${scheme.name} ${scheme.year}',
+      annual: annual,
+      annualPrize: scheme.annualPrize,
+      grandPrize: scheme.grandPrize,
+      periods: periods,
+      extras: extras,
+      breakdown: _breakdown(
+        number,
+        running?.startsOn ?? annual.startsOn,
+        running?.endsOn ?? annual.endsOn,
+      ),
+    );
+  }
+
+  /// Whether a movement falls inside a target's window, which runs to the
+  /// end of its last day.
+  bool _inside(_Movement movement, DateTime startsOn, DateTime endsOn) {
+    final end = DateTime(
+      endsOn.year,
+      endsOn.month,
+      endsOn.day,
+    ).add(const Duration(days: 1));
+    return !movement.postedAt.isBefore(startsOn) &&
+        movement.postedAt.isBefore(end);
+  }
+
+  /// One target with what has been scored toward it, and when it was reached.
+  ///
+  /// The running total is carried along so the row where it first reached
+  /// the target can be named — "met in August" rather than merely "met".
+  PointTarget _scored(String number, String kind, _SeededTarget target) {
+    var running = 0;
+    var scored = 0;
+    DateTime? metOn;
+
+    for (final movement in _oldestFirst(number)) {
+      if (!_inside(movement, target.startsOn, target.endsOn)) continue;
+      running += movement.counting;
+      if (running > scored) scored = running;
+      if (metOn == null && running >= target.targetPoints) {
+        metOn = movement.postedAt;
+      }
+    }
+
+    return PointTarget(
+      kind: kind,
+      label: target.label,
+      targetPoints: target.targetPoints,
+      scoredPoints: scored,
+      startsOn: target.startsOn,
+      endsOn: target.endsOn,
+      prize: target.prize,
+      metOn: metOn,
+    );
+  }
+
+  PointBreakdown _breakdown(String number, DateTime startsOn, DateTime endsOn) {
+    var purchases = 0;
+    var transferredIn = 0;
+    var reversals = 0;
+    for (final movement in _oldestFirst(number)) {
+      if (!_inside(movement, startsOn, endsOn)) continue;
+      switch (movement.type) {
+        case PointEntryType.purchaseAccrual:
+          purchases += movement.amount;
+        case PointEntryType.transferIn:
+          transferredIn += movement.amount;
+        case PointEntryType.reversal:
+          reversals += movement.amount;
+        case PointEntryType.transferOut:
+        case PointEntryType.crmAdjustment:
+          break;
+      }
+    }
+    return PointBreakdown(
+      purchases: purchases,
+      transferredIn: transferredIn,
+      reversals: reversals,
+    );
+  }
+
+  /// The last transfer this partner sent to that one, for the history line.
+  _Movement? _lastSentTo(String from, String to) {
+    _Movement? last;
+    for (final movement in _oldestFirst(from)) {
+      if (movement.type == PointEntryType.transferOut &&
+          movement.counterpartyNumber == to) {
+        last = movement;
+      }
+    }
+    return last;
+  }
+
+  @override
+  Future<List<PointRecipient>?> recipients(String mobileNumber) async {
+    final me = PartnerDirectory.find(mobileNumber);
+    if (me == null) return null;
+
+    final myRole = me.role.toLowerCase();
+    if (!_tradingRoles.contains(myRole)) return const <PointRecipient>[];
+
+    final number = PartnerDirectory.normalise(mobileNumber);
+    final found = <PointRecipient>[];
+    for (final account in PartnerDirectory.accounts) {
+      final theirNumber = PartnerDirectory.normalise(account.mobileNumber);
+      if (theirNumber == number) continue;
+      if (!_tradingRoles.contains(account.role.toLowerCase())) continue;
+
+      final last = _lastSentTo(number, theirNumber);
+      found.add(
+        PointRecipient(
+          mobileNumber: theirNumber,
+          name: account.displayName,
+          role: account.role.toLowerCase(),
+          lastSentAt: last?.postedAt,
+          lastSentAmount: last?.amount,
+        ),
+      );
+    }
+
+    // Most recently paid first, then by name, as the list reads.
+    found.sort((a, b) {
+      final at = a.lastSentAt;
+      final bt = b.lastSentAt;
+      if (at != null && bt != null) return bt.compareTo(at);
+      if (at != null) return -1;
+      if (bt != null) return 1;
+      return a.name.compareTo(b.name);
+    });
+    return found;
+  }
+
+  @override
+  Future<PointRecipient?> lookup({
+    required String mobileNumber,
+    required String recipientNumber,
+  }) async {
+    final all = await recipients(mobileNumber);
+    if (all == null) return null;
+
+    final wanted = PartnerDirectory.normalise(recipientNumber);
+    for (final recipient in all) {
+      if (recipient.mobileNumber == wanted) return recipient;
+    }
+    return null;
+  }
+
+  @override
+  Future<(PointTransferReceipt?, PointTransferFailure?)> send({
+    required String fromMobileNumber,
+    required String toMobileNumber,
+    required int amount,
+  }) async {
+    final from = PartnerDirectory.normalise(fromMobileNumber);
+    final to = PartnerDirectory.normalise(toMobileNumber);
+    if (from == to) return (null, PointTransferFailure.self);
+
+    final sender = PartnerDirectory.find(fromMobileNumber);
+    if (sender == null) return (null, PointTransferFailure.unreachable);
+    final receiver = PartnerDirectory.find(toMobileNumber);
+    if (receiver == null) {
+      return (null, PointTransferFailure.unknownRecipient);
+    }
+
+    // Each refusal is checked separately so the partner is told the one that
+    // actually applies, and each is stated before anything moves.
+    if (!_tradingRoles.contains(sender.role.toLowerCase()) ||
+        !_tradingRoles.contains(receiver.role.toLowerCase())) {
+      return (null, PointTransferFailure.pairNotPermitted);
+    }
+    if (balanceOf(from) < amount) {
+      return (null, PointTransferFailure.notEnoughPoints);
+    }
+
+    final reference = 'PT-2026-${_nextReference++}';
+    final postedAt = DateTime.now();
+
+    // Both legs share a reference, so the two partners are reading the same
+    // event rather than two that happen to match.
+    _movements
+      ..add(
+        _Movement(
+          number: from,
+          reference: reference,
+          type: PointEntryType.transferOut,
+          amount: amount,
+          credit: false,
+          counterpartyNumber: to,
+          postedAt: postedAt,
+        ),
+      )
+      ..add(
+        _Movement(
+          number: to,
+          reference: reference,
+          type: PointEntryType.transferIn,
+          amount: amount,
+          credit: true,
+          counterpartyNumber: from,
+          postedAt: postedAt,
+        ),
+      );
+
+    return (
+      PointTransferReceipt(
+        reference: reference,
+        amount: amount,
+        balance: balanceOf(from),
+        sentAt: postedAt,
+      ),
+      null,
+    );
   }
 }
 

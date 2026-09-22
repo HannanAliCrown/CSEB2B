@@ -235,6 +235,36 @@ class MockWalletRepository implements WalletRepository {
     return entry;
   }
 
+  /// Credits a Spin and Win prize, as the database does when a spin is
+  /// taken: the prize and the wallet entry are written together, so what the
+  /// wheel showed is what the balance moved by.
+  ///
+  /// Keyed by number rather than by the signed-in user because Inaam works
+  /// from the number alone, as the server's routes do.
+  Future<LedgerEntry?> creditSpinPrize({
+    required String mobileNumber,
+    required Money amount,
+    required String reference,
+  }) async {
+    final account = PartnerDirectory.find(mobileNumber);
+    if (account == null) return null;
+
+    final entry = LedgerEntry(
+      id: reference,
+      postedAt: DateTime.now(),
+      title: 'Spin and Win prize',
+      subtitle: reference,
+      amount: amount,
+      direction: LedgerDirection.credit,
+      // A prize is Crown Solar's own money: nobody has to accept it.
+      state: LedgerState.cleared,
+      type: LedgerType.spinPrize,
+    );
+    _ledgerFor(SignedInUser.fromAccount(account)).add(entry);
+    _announce();
+    return entry;
+  }
+
   List<LedgerEntry> _ledgerFor(SignedInUser user) => _ledgers.putIfAbsent(
     PartnerDirectory.normalise(user.mobileNumber),
     () => _seedFor(user),

@@ -190,6 +190,20 @@ class MockScanRepository implements ScanRepository {
   /// is not.
   final Map<String, Map<PartnerRole, ScanClaim>> _claims = _seedClaims();
 
+  /// Every claim this partner has taken, as `scan_claims` holds them.
+  ///
+  /// Read-only, and read by Inaam: a spin is earned by ten claims in a day,
+  /// and an item scheme counts the codes behind them. An authenticity check
+  /// takes no claim and so appears here no more than it does in the table.
+  Iterable<({String code, DateTime claimedAt})> claimsBy(String businessName) {
+    return [
+      for (final entry in _claims.entries)
+        for (final claim in entry.value.values)
+          if (claim.name == businessName)
+            (code: entry.key, claimedAt: claim.claimedAt),
+    ];
+  }
+
   /// The deterministic starting state: one code already claimed in both
   /// roles, so the already-scanned result can be seen without scanning twice.
   static Map<String, Map<PartnerRole, ScanClaim>> _seedClaims() => {

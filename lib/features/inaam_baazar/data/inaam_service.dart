@@ -4,8 +4,12 @@
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
+
+import '../../../core/mock/partner_directory.dart';
+import '../../scan/data/scan_repository.dart';
 
 import '../../wallet/data/wallet_repository.dart';
 
@@ -330,26 +334,47 @@ class RewardProgram {
   );
 }
 
+/// Inaam Baazar's data boundary.
+///
+/// [HttpInaamService] reads the database behind `prototype_server`.
+/// [MockInaamService] applies the same configuration in memory, counting the
+/// same scan claims.
+abstract interface class InaamService {
+  Future<SpinState?> spinState(String mobileNumber);
+
+  /// Takes one spin. The prize is chosen and paid in one step, so this
+  /// returns what was actually credited.
+  Future<(Spin?, SpinFailure?)> spin(String mobileNumber);
+
+  Future<List<ItemScheme>?> itemSchemes(String mobileNumber);
+
+  /// Takes the one claim a scheme allows.
+  Future<(ItemScheme?, ClaimFailure?)> claim({
+    required String mobileNumber,
+    required String schemeId,
+    required String tierId,
+  });
+
+  Future<RewardProgram?> rewardProgram(String mobileNumber);
+}
+
 /// Inaam Baazar's data boundary, backed by the database behind
 /// `prototype_server`.
-///
-/// There is deliberately no in-memory implementation. A prize won and then
-/// forgotten on restart is worse than one that plainly fails to be paid.
-class InaamService {
-  InaamService({required String baseUrl, http.Client? client})
+class HttpInaamService implements InaamService {
+  HttpInaamService({required String baseUrl, http.Client? client})
     : _baseUrl = baseUrl,
       _client = client ?? http.Client();
 
   final String _baseUrl;
   final http.Client _client;
 
+  @override
   Future<SpinState?> spinState(String mobileNumber) async {
     final body = await _get('/inaam/spin', {'mobileNumber': mobileNumber});
     return body == null ? null : SpinState.fromJson(body);
   }
 
-  /// Takes one spin. The prize is chosen and paid by the server, inside one
-  /// transaction, so this returns what was actually credited.
+  @override
   Future<(Spin?, SpinFailure?)> spin(String mobileNumber) async {
     final http.Response response;
     try {
@@ -379,6 +404,7 @@ class InaamService {
     );
   }
 
+  @override
   Future<List<ItemScheme>?> itemSchemes(String mobileNumber) async {
     final body = await _get('/inaam/item-schemes', {
       'mobileNumber': mobileNumber,
@@ -390,7 +416,7 @@ class InaamService {
     ];
   }
 
-  /// Takes the one claim a scheme allows.
+  @override
   Future<(ItemScheme?, ClaimFailure?)> claim({
     required String mobileNumber,
     required String schemeId,
@@ -429,6 +455,7 @@ class InaamService {
     );
   }
 
+  @override
   Future<RewardProgram?> rewardProgram(String mobileNumber) async {
     final body = await _get('/inaam/reward-program', {
       'mobileNumber': mobileNumber,
@@ -449,6 +476,419 @@ class InaamService {
     } on Object {
       return null;
     }
+  }
+}
+
+/// One segment of the wheel, with the weight that decides how often it lands.
+class _SeededSegment {
+  const _SeededSegment({required this.amountPaisa, required this.weight});
+
+  final int amountPaisa;
+  final int weight;
+}
+
+/// One tier of an item scheme.
+class _SeededTier {
+  const _SeededTier({
+    required this.name,
+    required this.threshold,
+    required this.rewardPaisa,
+  });
+
+  final String name;
+
+  /// Scans, or paisa, depending on the scheme's measure.
+  final int threshold;
+
+  final int rewardPaisa;
+}
+
+/// One item scheme, and the product codes that count toward it.
+class _SeededScheme {
+  const _SeededScheme({
+    required this.id,
+    required this.name,
+    required this.measure,
+    required this.codePrefix,
+    required this.startsOn,
+    required this.endsOn,
+    required this.tiers,
+  });
+
+  final String id;
+  final String name;
+
+  /// 'scans' | 'amount'. Never both.
+  final String measure;
+
+  /// `item_scheme_products` joins products by their code prefix.
+  final String codePrefix;
+
+  final DateTime startsOn;
+  final DateTime endsOn;
+  final List<_SeededTier> tiers;
+}
+
+/// A claim already taken on a scheme.
+class _TakenClaim {
+  const _TakenClaim({
+    required this.tierName,
+    required this.amountPaisa,
+    required this.reference,
+  });
+
+  final String tierName;
+  final int amountPaisa;
+  final String reference;
+}
+
+/// Inaam Baazar's data boundary, held in memory.
+///
+/// The wheel, its odds, the two item schemes and the monthly programme
+/// `db/seed/009_inaam_baazar.sql` writes.
+///
+/// Scans are counted from [MockScanRepository]'s claims rather than held
+/// here, so ten scans in a day earn a spin exactly as they do through the
+/// database, and a prize is credited to [MockWalletRepository] in the same
+/// step the spin is taken.
+class MockInaamService implements InaamService {
+  MockInaamService({
+    required MockScanRepository scans,
+    required MockWalletRepository wallet,
+  }) : _scans = scans,
+       _wallet = wallet;
+
+  final MockScanRepository _scans;
+  final MockWalletRepository _wallet;
+
+  /// Spins taken, newest last, by partner.
+  final Map<String, List<Spin>> _spins = {};
+
+  /// The one claim each scheme allows, by partner then scheme.
+  final Map<String, Map<String, _TakenClaim>> _claims = {};
+
+  final _random = Random();
+
+  int _nextReference = 1;
+
+  static const _scansPerSpin = 10;
+
+  /// Eight segments, as the design draws them. The weights are what make the
+  /// smallest prize the usual outcome, and they never leave this class.
+  static const _segments = <_SeededSegment>[
+    _SeededSegment(amountPaisa: 5000, weight: 156),
+    _SeededSegment(amountPaisa: 5000, weight: 156),
+    _SeededSegment(amountPaisa: 5000, weight: 156),
+    _SeededSegment(amountPaisa: 50000, weight: 60),
+    _SeededSegment(amountPaisa: 5000, weight: 156),
+    _SeededSegment(amountPaisa: 5000, weight: 156),
+    _SeededSegment(amountPaisa: 5000, weight: 156),
+    _SeededSegment(amountPaisa: 5000000, weight: 4),
+  ];
+
+  static final _schemes = <_SeededScheme>[
+    _SeededScheme(
+      id: 'inverter-scan-scheme',
+      name: 'Inverter Scan Scheme',
+      measure: 'scans',
+      codePrefix: 'CS-INV-',
+      startsOn: DateTime(2026, 7),
+      endsOn: DateTime(2026, 12, 31),
+      tiers: const [
+        _SeededTier(name: 'Silver', threshold: 150, rewardPaisa: 1400000),
+        _SeededTier(name: 'Gold', threshold: 300, rewardPaisa: 2500000),
+        _SeededTier(name: 'Platinum', threshold: 500, rewardPaisa: 4000000),
+      ],
+    ),
+    _SeededScheme(
+      id: 'panel-purchase-scheme',
+      name: 'Panel Purchase Scheme',
+      measure: 'amount',
+      codePrefix: 'CS-PNL-',
+      startsOn: DateTime(2026, 7),
+      endsOn: DateTime(2026, 12, 31),
+      tiers: const [
+        _SeededTier(name: 'Silver', threshold: 120000000, rewardPaisa: 1400000),
+        _SeededTier(name: 'Gold', threshold: 250000000, rewardPaisa: 2500000),
+        _SeededTier(
+          name: 'Platinum',
+          threshold: 400000000,
+          rewardPaisa: 4000000,
+        ),
+      ],
+    ),
+  ];
+
+  /// What SAP has posted against the amount-measured scheme. Scans the app
+  /// counts itself; rupees it does not.
+  static const _amountProgress = <String, Map<String, int>>{
+    '3004821190': {'panel-purchase-scheme': 131040000},
+  };
+
+  /// The monthly programme's tiers, the same on every month.
+  static const _programTiers = <ProgramTier>[
+    ProgramTier(name: 'SILVER', scanTarget: 10, bonusPercent: 25),
+    ProgramTier(name: 'GOLD', scanTarget: 25, bonusPercent: 50),
+    ProgramTier(name: 'PLATINUM', scanTarget: 40, bonusPercent: 100),
+  ];
+
+  /// The programme the reward tab is about, and the one before it that the
+  /// month-end job has already decided.
+  static final _currentProgram = (
+    label: 'September 2026',
+    startsOn: DateTime(2026, 9),
+    endsOn: DateTime(2026, 9, 30),
+  );
+
+  /// What the month-end job decided for August: Silver, so a +25% bonus runs
+  /// through September.
+  static const _awardNumber = '3004821190';
+
+  /// Codes counting toward the monthly programme.
+  static const _programCodePrefix = 'CS-INV-';
+
+  /// This partner's claims, from the scan repository that holds them.
+  Iterable<({String code, DateTime claimedAt})> _claimsOf(String mobileNumber) {
+    final account = PartnerDirectory.find(mobileNumber);
+    if (account == null) return const [];
+    return _scans.claimsBy(account.displayName);
+  }
+
+  /// Claims taken today. An authenticity check takes no claim and so earns
+  /// no spin — checking stock on a shelf is not scanning a product.
+  int _scansToday(String mobileNumber) {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    var scans = 0;
+    for (final claim in _claimsOf(mobileNumber)) {
+      if (!claim.claimedAt.isBefore(startOfDay)) scans++;
+    }
+    return scans;
+  }
+
+  int _spinsToday(String mobileNumber) {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final taken = _spins[PartnerDirectory.normalise(mobileNumber)];
+    if (taken == null) return 0;
+    var spins = 0;
+    for (final spin in taken) {
+      if (!spin.spunAt.isBefore(startOfDay)) spins++;
+    }
+    return spins;
+  }
+
+  /// Claims on codes with this prefix, inside a window that runs to the end
+  /// of its last day.
+  int _claimsInWindow(
+    String mobileNumber,
+    String prefix,
+    DateTime startsOn,
+    DateTime endsOn,
+  ) {
+    final end = DateTime(
+      endsOn.year,
+      endsOn.month,
+      endsOn.day,
+    ).add(const Duration(days: 1));
+    var scans = 0;
+    for (final claim in _claimsOf(mobileNumber)) {
+      if (!claim.code.startsWith(prefix)) continue;
+      if (claim.claimedAt.isBefore(startsOn)) continue;
+      if (!claim.claimedAt.isBefore(end)) continue;
+      scans++;
+    }
+    return scans;
+  }
+
+  @override
+  Future<SpinState?> spinState(String mobileNumber) async {
+    if (PartnerDirectory.find(mobileNumber) == null) return null;
+
+    final scansToday = _scansToday(mobileNumber);
+    final history =
+        _spins[PartnerDirectory.normalise(mobileNumber)] ?? const <Spin>[];
+
+    return SpinState(
+      scansToday: scansToday,
+      scansPerSpin: _scansPerSpin,
+      // Earned, less taken. Never negative: moving the threshold up must not
+      // put a partner into a debt of spins.
+      spinsAvailable: max(
+        0,
+        scansToday ~/ _scansPerSpin - _spinsToday(mobileNumber),
+      ),
+      scansToNextSpin: _scansPerSpin - (scansToday % _scansPerSpin),
+      segments: [for (final segment in _segments) Money(segment.amountPaisa)],
+      history: history.reversed.take(20).toList(),
+    );
+  }
+
+  @override
+  Future<(Spin?, SpinFailure?)> spin(String mobileNumber) async {
+    if (PartnerDirectory.find(mobileNumber) == null) {
+      return (null, SpinFailure.unreachable);
+    }
+
+    final earned = _scansToday(mobileNumber) ~/ _scansPerSpin;
+    if (earned - _spinsToday(mobileNumber) <= 0) {
+      return (null, SpinFailure.noSpins);
+    }
+
+    // Weighted pick. The weights never leave this method.
+    var total = 0;
+    for (final segment in _segments) {
+      total += segment.weight;
+    }
+    var roll = _random.nextInt(total);
+    var won = _segments.first;
+    for (final segment in _segments) {
+      roll -= segment.weight;
+      if (roll < 0) {
+        won = segment;
+        break;
+      }
+    }
+
+    final reference = 'SPN-${_nextReference++}';
+    final spin = Spin(
+      reference: reference,
+      amount: Money(won.amountPaisa),
+      spunAt: DateTime.now(),
+    );
+
+    // The prize and the wallet entry are written together, so what the wheel
+    // showed is what the balance moved by.
+    await _wallet.creditSpinPrize(
+      mobileNumber: mobileNumber,
+      amount: spin.amount,
+      reference: reference,
+    );
+    (_spins[PartnerDirectory.normalise(mobileNumber)] ??= []).add(spin);
+    return (spin, null);
+  }
+
+  int _progressOf(String mobileNumber, _SeededScheme scheme) {
+    if (scheme.measure == 'amount') {
+      final number = PartnerDirectory.normalise(mobileNumber);
+      return _amountProgress[number]?[scheme.id] ?? 0;
+    }
+    return _claimsInWindow(
+      mobileNumber,
+      scheme.codePrefix,
+      scheme.startsOn,
+      scheme.endsOn,
+    );
+  }
+
+  ItemScheme _schemeFrom(String mobileNumber, _SeededScheme scheme) {
+    final progress = _progressOf(mobileNumber, scheme);
+    final taken = _claims[PartnerDirectory.normalise(mobileNumber)]?[scheme.id];
+
+    return ItemScheme(
+      id: scheme.id,
+      name: scheme.name,
+      measure: scheme.measure,
+      progress: progress,
+      startsOn: scheme.startsOn,
+      endsOn: scheme.endsOn,
+      tiers: [
+        for (final tier in scheme.tiers)
+          SchemeTier(
+            id: '${scheme.id}:${tier.name.toLowerCase()}',
+            name: tier.name,
+            threshold: tier.threshold,
+            reward: Money(tier.rewardPaisa),
+            reached: progress >= tier.threshold,
+          ),
+      ],
+      claimedTierName: taken?.tierName,
+      claimedAmount: taken == null ? null : Money(taken.amountPaisa),
+      claimedReference: taken?.reference,
+    );
+  }
+
+  @override
+  Future<List<ItemScheme>?> itemSchemes(String mobileNumber) async {
+    if (PartnerDirectory.find(mobileNumber) == null) return null;
+    return [for (final scheme in _schemes) _schemeFrom(mobileNumber, scheme)];
+  }
+
+  @override
+  Future<(ItemScheme?, ClaimFailure?)> claim({
+    required String mobileNumber,
+    required String schemeId,
+    required String tierId,
+  }) async {
+    if (PartnerDirectory.find(mobileNumber) == null) {
+      return (null, ClaimFailure.unreachable);
+    }
+
+    _SeededScheme? scheme;
+    for (final candidate in _schemes) {
+      if (candidate.id == schemeId) scheme = candidate;
+    }
+    if (scheme == null) return (null, ClaimFailure.unknownTier);
+
+    _SeededTier? tier;
+    for (final candidate in scheme.tiers) {
+      if ('${scheme.id}:${candidate.name.toLowerCase()}' == tierId) {
+        tier = candidate;
+      }
+    }
+    if (tier == null) return (null, ClaimFailure.unknownTier);
+
+    final number = PartnerDirectory.normalise(mobileNumber);
+    // One claim to a scheme, which is what makes the choice of tier matter.
+    if (_claims[number]?[scheme.id] != null) {
+      return (null, ClaimFailure.alreadyClaimed);
+    }
+    if (_progressOf(mobileNumber, scheme) < tier.threshold) {
+      return (null, ClaimFailure.notReached);
+    }
+
+    final reference = 'CLM-${_nextReference++}';
+    (_claims[number] ??= {})[scheme.id] = _TakenClaim(
+      tierName: tier.name,
+      amountPaisa: tier.rewardPaisa,
+      reference: reference,
+    );
+    // The reward is Crown Solar's own money: nobody has to accept it.
+    await _wallet.creditSpinPrize(
+      mobileNumber: mobileNumber,
+      amount: Money(tier.rewardPaisa),
+      reference: reference,
+    );
+    return (_schemeFrom(mobileNumber, scheme), null);
+  }
+
+  @override
+  Future<RewardProgram?> rewardProgram(String mobileNumber) async {
+    if (PartnerDirectory.find(mobileNumber) == null) return null;
+
+    final scans = _claimsInWindow(
+      mobileNumber,
+      _programCodePrefix,
+      _currentProgram.startsOn,
+      _currentProgram.endsOn,
+    );
+
+    // What last month earned, and how long it runs. A tier reached in August
+    // pays through September, so the month that earned it is not the month
+    // the bonus runs in.
+    final awarded = PartnerDirectory.normalise(mobileNumber) == _awardNumber;
+
+    return RewardProgram(
+      label: _currentProgram.label,
+      startsOn: _currentProgram.startsOn,
+      endsOn: _currentProgram.endsOn,
+      tiers: _programTiers,
+      scans: scans,
+      awardTierName: awarded ? 'SILVER' : null,
+      awardBonusPercent: awarded ? 25 : null,
+      awardAppliesUntil: awarded ? DateTime(2026, 9, 30) : null,
+      awardEarnedOn: awarded ? DateTime(2026, 8) : null,
+    );
   }
 }
 
