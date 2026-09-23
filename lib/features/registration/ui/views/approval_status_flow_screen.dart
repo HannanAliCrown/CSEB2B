@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/ui/ds.dart';
 import '../../data/repositories/registration_repository.dart';
@@ -143,9 +144,27 @@ class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
     );
   }
 
-  void _call(_Approver approver) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Calling ${approver.title} is not wired up yet.')),
+  /// Opens the dialler with the number in it — it does not ring.
+  ///
+  /// The number is a placeholder: approvers are roles, not people, and Crown
+  /// Solar has not given a number per role yet. When they do, it comes from
+  /// the support contacts the profile already reads and this constant goes.
+  static const _placeholderNumber = '0000000000';
+
+  Future<void> _call(_Approver approver) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final opened = await launchUrl(
+      Uri(scheme: 'tel', path: _placeholderNumber),
+    );
+    if (opened) return;
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Could not open the dialler. Call ${approver.title} on '
+          '$_placeholderNumber.',
+        ),
+      ),
     );
   }
 }

@@ -403,6 +403,29 @@ class PostgresPartnerDataStore implements PartnerDataStore {
             'mobileNumber': number,
           },
         );
+
+        // Being named as somebody's buying source is something to be told
+        // about, not something to discover by opening New Profile. The
+        // SELECT is the guard: an unmatched number is nobody's account, so
+        // it notifies nobody.
+        await session.execute(
+          Sql.named('''
+            INSERT INTO notifications (
+              account_id, level, title, body,
+              destination_label, destination_route
+            )
+            SELECT a.id, 'info', @title, @body,
+                   'opens New Profile', '/profile-requests'
+              FROM accounts a WHERE a.mobile_number = @mobileNumber
+          '''),
+          parameters: {
+            'mobileNumber': number,
+            'title': 'New profile request',
+            'body':
+                '${input.businessName} named you as a partner they buy '
+                'from. Confirm whether they do.',
+          },
+        );
       }
 
       for (final item in input.media) {

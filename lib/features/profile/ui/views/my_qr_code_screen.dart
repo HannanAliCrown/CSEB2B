@@ -79,15 +79,20 @@ class MyQrCodeScreen extends StatelessWidget {
                 icon: LucideIcons.messageCircle,
                 text: 'Start a chat with you',
               ),
-              if (user.role != PartnerRole.installer)
+              // An installer neither receives cash nor holds points — cash
+              // moves up the chain, and Inaam stands where Points does for
+              // everyone else. Offering either here would promise something
+              // the scanner cannot do.
+              if (user.role != PartnerRole.installer) ...[
                 const _UseLine(
                   icon: LucideIcons.banknoteArrowUp,
                   text: 'Send cash to you',
                 ),
-              const _UseLine(
-                icon: LucideIcons.award,
-                text: 'Send points to you',
-              ),
+                const _UseLine(
+                  icon: LucideIcons.award,
+                  text: 'Send points to you',
+                ),
+              ],
             ],
           ),
         ),
