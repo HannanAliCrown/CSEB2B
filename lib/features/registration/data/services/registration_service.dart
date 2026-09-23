@@ -118,7 +118,25 @@ abstract interface class RegistrationService {
 
   /// The most recent application on this number, whatever state it is in.
   Future<RegistrationSubmission?> latestSubmission(String mobileNumber);
+
+  /// Prototype only: records an approval a real approver would record in
+  /// CRM, so the chain can be walked through without a back office — the
+  /// same reason [RegistrationOtpResult.prototypeCode] is surfaced. A build
+  /// with a server ignores it and answers with whatever the server holds.
+  ///
+  /// Returns the application as it now stands, or null when there is none.
+  Future<RegistrationSubmission?> recordPrototypeApproval({
+    required String mobileNumber,
+    required PrototypeApprover approver,
+  });
 }
+
+/// The approvals a server-less build can record from the app.
+///
+/// The buying source is absent on purpose: that verdict belongs to the
+/// partner the applicant named, who gives it in New Profile. Nothing on the
+/// applicant's own phone can stand in for them.
+enum PrototypeApprover { marketingOfficer, crm }
 
 /// A submission the server refused. The message is the one to show: the
 /// wizard has already checked each of these, so reaching one means something

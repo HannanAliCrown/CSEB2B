@@ -23,6 +23,15 @@ class PendingRegistration {
     required this.market,
     required this.verifyingSourceName,
     required this.submittedAt,
+    this.verifyingSourceNumber,
+    this.businessAddress,
+    this.alternateNumber,
+    this.shopLatitude,
+    this.shopLongitude,
+    this.otherBuyingSources = const [],
+    this.videoLinks = const [],
+    this.shopImageSlots = const [],
+    this.hasSelfie = false,
   });
 
   final String reference;
@@ -35,7 +44,32 @@ class PendingRegistration {
   /// The buying source asked to confirm the applicant really buys from them.
   final String? verifyingSourceName;
 
+  /// That same buying source's number, which is how their own inbox finds
+  /// this application. Null when the applicant named nobody the directory
+  /// knows — nothing is then routed anywhere.
+  final String? verifyingSourceNumber;
+
   final DateTime submittedAt;
+
+  /// The rest of what was submitted, kept as plain values so the features
+  /// that show it — the buying source's inbox among them — can shape it
+  /// however their own screens need. The CNIC number and its images are
+  /// deliberately absent: they never leave CRM.
+  final String? businessAddress;
+  final String? alternateNumber;
+  final String? shopLatitude;
+  final String? shopLongitude;
+
+  /// Every other source the applicant named, by the name they were matched
+  /// to, or by number when the directory did not know them.
+  final List<String> otherBuyingSources;
+
+  final List<String> videoLinks;
+
+  /// Which shop photos were taken, by the slot they filled.
+  final List<String> shopImageSlots;
+
+  final bool hasSelfie;
 
   /// All three start outstanding. Nothing is approved on submission.
   final Map<Approver, ApprovalState> approvals = {
@@ -71,6 +105,19 @@ abstract final class PendingRegistrations {
 
   static PendingRegistration? find(String mobileNumber) =>
       _byNumber[_key(mobileNumber)];
+
+  /// The applications that named this partner as the buying source who has
+  /// to verify them, newest first. This is how an application submitted on
+  /// this phone reaches the inbox of the partner it names.
+  static List<PendingRegistration> awaitingVerificationBy(String mobileNumber) {
+    final needle = _key(mobileNumber);
+    return [
+      for (final registration in _byNumber.values)
+        if (registration.verifyingSourceNumber != null &&
+            _key(registration.verifyingSourceNumber!) == needle)
+          registration,
+    ]..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+  }
 
   static void clear() => _byNumber.clear();
 }

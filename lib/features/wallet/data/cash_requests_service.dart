@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/mock/partner_directory.dart';
+import '../../../core/mock/pending_registrations.dart';
 import 'wallet_repository.dart';
 
 /// Where a transfer sent to this partner has got to.
@@ -182,7 +183,14 @@ class _SeededTransfer {
 /// as long as the process does, which is what a build with no database can
 /// offer.
 class MockCashRequestsService implements CashRequestsService {
-  MockCashRequestsService() : _seededAt = DateTime.now();
+  MockCashRequestsService({required MockWalletRepository wallet})
+    : _wallet = wallet,
+      _seededAt = DateTime.now();
+
+  /// Where the real transfers live. A transfer is one record — the sender's
+  /// held ledger line — so the inbox reads it from there rather than keeping
+  /// a second copy that could disagree with the wallet.
+  final MockWalletRepository _wallet;
 
   /// The seed writes its intervals against `now()`. Holding the moment the
   /// rows were built keeps `sentAt` still while the app runs, as a row in a
@@ -243,12 +251,43 @@ class MockCashRequestsService implements CashRequestsService {
     );
   }
 
+  /// A transfer actually sent in the app, as the partner it was sent to sees
+  /// it. It never expires: the sender's money stays held until this partner
+  /// answers, and a deadline nobody enforces would be a lie.
+  CashRequest _fromTransfer(IncomingTransfer transfer) {
+    // The directory first, then a partner who registered on this phone —
+    // otherwise everyone who joined after the directory was written would
+    // arrive in the inbox as "A partner".
+    final account = PartnerDirectory.find(transfer.fromNumber);
+    final pending = PendingRegistrations.find(transfer.fromNumber);
+    return CashRequest(
+      reference: transfer.entry.id,
+      fromName: account?.displayName ?? pending?.businessName ?? 'A partner',
+      fromRole: account?.role ?? pending?.role ?? 'Partner',
+      amount: transfer.entry.amount,
+      state: switch (transfer.entry.state) {
+        LedgerState.held => CashRequestState.waiting,
+        LedgerState.rejected => CashRequestState.rejected,
+        LedgerState.cleared => CashRequestState.approved,
+      },
+      note: transfer.entry.subtitle,
+      sentAt: transfer.entry.postedAt,
+    );
+  }
+
   @override
   Future<List<CashRequest>?> requests(String mobileNumber) async {
+    // Transfers sent to this partner in the app, newest first, then the
+    // seeded ones the one seeded receiver also has.
+    final sent = [
+      for (final transfer in _wallet.incomingTransfers(mobileNumber))
+        _fromTransfer(transfer),
+    ];
+
     if (PartnerDirectory.normalise(mobileNumber) != _receiverNumber) {
-      return const <CashRequest>[];
+      return sent;
     }
-    return [for (final row in _seeded) _build(row)];
+    return [...sent, for (final row in _seeded) _build(row)];
   }
 
   @override
@@ -263,6 +302,16 @@ class MockCashRequestsService implements CashRequestsService {
     required String reference,
     required bool approved,
   }) async {
+    // A transfer actually sent in the app: the wallet moves the money, so
+    // the hold is released and the receiver credited in one step rather than
+    // this service keeping a verdict the balances know nothing about.
+    final sent = _wallet
+        .incomingTransfers(mobileNumber)
+        .any((transfer) => transfer.entry.id == reference);
+    if (sent) {
+      return _wallet.settleTransfer(id: reference, approved: approved);
+    }
+
     if (PartnerDirectory.normalise(mobileNumber) != _receiverNumber) {
       return false;
     }

@@ -205,6 +205,13 @@ class MockChatRepository implements ChatRepository {
   /// Opening conversations, so the list is never empty on first sight. Every
   /// partner thread is with someone who really exists in the directory.
   List<ChatThread> _seed(SignedInUser user) {
+    // Only the partners the bundled directory already knows have a history.
+    // Someone who registered on this phone has spoken to nobody yet, so
+    // their Space stays empty until they start a conversation themselves.
+    if (PartnerDirectory.find(user.mobileNumber) == null) {
+      return <ChatThread>[];
+    }
+
     final now = DateTime.now();
     final mine = PartnerDirectory.normalise(user.mobileNumber);
 

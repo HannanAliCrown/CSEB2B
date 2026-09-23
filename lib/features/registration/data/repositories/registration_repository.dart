@@ -59,4 +59,13 @@ class RegistrationRepository {
 
   Future<RegistrationSubmission?> latestSubmission(String mobileNumber) =>
       _service.latestSubmission(mobileNumber);
+
+  /// Prototype only: see [RegistrationService.recordPrototypeApproval].
+  Future<RegistrationSubmission?> recordPrototypeApproval({
+    required String mobileNumber,
+    required PrototypeApprover approver,
+  }) => _service.recordPrototypeApproval(
+    mobileNumber: mobileNumber,
+    approver: approver,
+  );
 }

@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/mock/partner_directory.dart';
+import '../../../core/mock/pending_registrations.dart';
 
 /// Someone who named this partner as their buying source, waiting to be
 /// verified.
@@ -251,12 +252,26 @@ class MockProfileRequestsService implements ProfileRequestsService {
   @override
   Future<List<ProfileRequest>?> pending(String mobileNumber) async {
     if (PartnerDirectory.find(mobileNumber) == null) return null;
+
+    // Applications submitted on this phone that named this partner, newest
+    // first, followed by the seeded one. A registration reaches its buying
+    // source's inbox this way without either side knowing the other exists.
+    final submitted = [
+      for (final registration in PendingRegistrations.awaitingVerificationBy(
+        mobileNumber,
+      ))
+        if (registration.approvals[Approver.receiver] ==
+            ApprovalState.outstanding)
+          _fromRegistration(registration),
+    ];
+
     if (PartnerDirectory.normalise(mobileNumber) != _verifierNumber ||
         _decided) {
-      return const <ProfileRequest>[];
+      return submitted;
     }
 
     return [
+      ...submitted,
       ProfileRequest(
         applicationId: _applicationId,
         reference: 'CSE-5560071',
@@ -274,6 +289,39 @@ class MockProfileRequestsService implements ProfileRequestsService {
       ),
     ];
   }
+
+  /// An application submitted on this phone, as the inbox shows it. Its
+  /// reference doubles as its id: the prototype has nothing else to key on,
+  /// and a reference is already unique per application.
+  static ProfileRequest _fromRegistration(PendingRegistration registration) =>
+      ProfileRequest(
+        applicationId: registration.reference,
+        reference: registration.reference,
+        mobileNumber: PartnerDirectory.normalise(registration.mobileNumber),
+        contactName: registration.contactName,
+        businessName: registration.businessName,
+        role: registration.role.toLowerCase(),
+        businessAddress: registration.businessAddress,
+        marketName: registration.market.isEmpty ? null : registration.market,
+        submittedAt: registration.submittedAt,
+        alternateNumber: registration.alternateNumber == null
+            ? null
+            : PartnerDirectory.normalise(registration.alternateNumber!),
+        shopLatitude: registration.shopLatitude,
+        shopLongitude: registration.shopLongitude,
+        otherBuyingSources: registration.otherBuyingSources,
+        media: [
+          if (registration.hasSelfie) const ProfileRequestItem(kind: 'selfie'),
+          for (final slot in registration.shopImageSlots)
+            ProfileRequestItem(kind: 'shop_image', slot: slot),
+          for (var i = 0; i < registration.videoLinks.length; i++)
+            ProfileRequestItem(
+              kind: 'video_link',
+              slot: '${i + 1}',
+              linkUrl: registration.videoLinks[i],
+            ),
+        ],
+      );
 
   @override
   Future<int> outstandingCount(String mobileNumber) async =>
@@ -296,6 +344,22 @@ class MockProfileRequestsService implements ProfileRequestsService {
     if (!approved && (note == null || note.trim().isEmpty)) {
       return ProfileDecisionFailure.reasonMissing;
     }
+    // An application submitted on this phone: the verdict is recorded on the
+    // approval the applicant's own status screen watches, so one decision
+    // shows on both sides rather than being kept twice.
+    final submitted = PendingRegistrations.awaitingVerificationBy(mobileNumber)
+        .where((registration) => registration.reference == applicationId)
+        .firstOrNull;
+    if (submitted != null) {
+      if (submitted.approvals[Approver.receiver] != ApprovalState.outstanding) {
+        return ProfileDecisionFailure.notOutstanding;
+      }
+      submitted.approvals[Approver.receiver] = approved
+          ? ApprovalState.approved
+          : ApprovalState.rejected;
+      return null;
+    }
+
     if (PartnerDirectory.normalise(mobileNumber) != _verifierNumber ||
         applicationId != _applicationId ||
         _decided) {

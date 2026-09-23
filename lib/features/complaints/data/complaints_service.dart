@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/mock/partner_directory.dart';
+import '../../../core/mock/pending_registrations.dart';
 
 /// How urgent a complaint is.
 enum ComplaintPriority { low, medium, high }
@@ -909,22 +910,27 @@ class MockComplaintsService implements ComplaintsService {
   @override
   Future<NotificationList?> notifications(String mobileNumber) async {
     if (PartnerDirectory.find(mobileNumber) == null) return null;
-    if (PartnerDirectory.normalise(mobileNumber) != _ownerNumber) {
-      return const NotificationList(notifications: [], unread: 0);
-    }
 
     final all = [
-      for (final row in _notifications)
-        AppNotification(
-          id: row.id,
-          level: row.level,
-          title: row.title,
-          body: row.body,
-          destinationLabel: row.destinationLabel,
-          destinationRoute: row.destinationRoute,
-          createdAt: _seededAt.subtract(row.ago),
-          read: !row.unread || _read.contains(row.id),
-        ),
+      // A registration submitted on this phone that named this partner as
+      // its buying source. It is told here as well as in New Profile: a
+      // request nobody is told about is a request nobody answers.
+      for (final registration in PendingRegistrations.awaitingVerificationBy(
+        mobileNumber,
+      ))
+        _buyingSourceNotification(registration),
+      if (PartnerDirectory.normalise(mobileNumber) == _ownerNumber)
+        for (final row in _notifications)
+          AppNotification(
+            id: row.id,
+            level: row.level,
+            title: row.title,
+            body: row.body,
+            destinationLabel: row.destinationLabel,
+            destinationRoute: row.destinationRoute,
+            createdAt: _seededAt.subtract(row.ago),
+            read: !row.unread || _read.contains(row.id),
+          ),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return NotificationList(
@@ -933,11 +939,44 @@ class MockComplaintsService implements ComplaintsService {
     );
   }
 
+  /// Told to the buying source the applicant named, and kept afterwards: it
+  /// is the record that they were asked, so it changes its wording once they
+  /// have answered rather than disappearing.
+  AppNotification _buyingSourceNotification(PendingRegistration registration) {
+    final outstanding =
+        registration.approvals[Approver.receiver] == ApprovalState.outstanding;
+
+    return AppNotification(
+      id: _buyingSourceNotificationId(registration),
+      level: outstanding ? 'warning' : 'success',
+      title: outstanding ? 'New profile request' : 'Profile request answered',
+      body: outstanding
+          ? '${registration.contactName} of ${registration.businessName} '
+                'registered and named you as their buying source. They cannot '
+                'be approved until you confirm they buy from you.'
+          : '${registration.contactName} of ${registration.businessName} '
+                'named you as their buying source. You have answered this '
+                'one — Crown Solar carries it on from here.',
+      destinationLabel: outstanding ? 'opens New Profile' : null,
+      destinationRoute: outstanding ? '/profile-requests' : null,
+      createdAt: registration.submittedAt,
+      read: _read.contains(_buyingSourceNotificationId(registration)),
+    );
+  }
+
+  static String _buyingSourceNotificationId(PendingRegistration registration) =>
+      'profile-request-${registration.reference}';
+
   @override
   Future<void> markRead({required String mobileNumber, String? id}) async {
     if (id == null) {
       for (final row in _notifications) {
         _read.add(row.id);
+      }
+      for (final registration in PendingRegistrations.awaitingVerificationBy(
+        mobileNumber,
+      )) {
+        _read.add(_buyingSourceNotificationId(registration));
       }
       return;
     }

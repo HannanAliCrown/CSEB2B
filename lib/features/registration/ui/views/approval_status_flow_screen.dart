@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/ui/ds.dart';
 import '../../data/repositories/registration_repository.dart';
 import '../../data/services/registration_service.dart';
+
+/// The number every "Call" row dials until Crown Solar supplies the real
+/// ones. It is deliberately not a working number: an applicant who reaches
+/// it knows it is a stand-in rather than the wrong person.
+///
+/// The buying source's own number is deliberately not dialled either, even
+/// though the application carries it — the applicant is not given a
+/// partner's number by a screen.
+const String _placeholderNumber = '00000';
 
 /// Where a submitted registration stands, for the partner who submitted it.
 ///
@@ -143,10 +153,42 @@ class _ApprovalStatusFlowScreenState extends State<ApprovalStatusFlowScreen> {
     );
   }
 
-  void _call(_Approver approver) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Calling ${approver.title} is not wired up yet.')),
+  /// Opens the phone's dialler, and — for the two approvers a back office
+  /// would answer for — records the approval the call stands in for.
+  ///
+  /// The Buying Source is deliberately left outstanding: that verdict is the
+  /// named partner's to give in New Profile, and no call from the
+  /// applicant's own phone can stand in for it.
+  Future<void> _call(_Approver approver) async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    // `tel:` opens the dialler with the number in it — it does not ring.
+    final opened = await launchUrl(
+      Uri(scheme: 'tel', path: _placeholderNumber),
     );
+    if (!opened) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'No dialler on this device. ${approver.title}: $_placeholderNumber',
+          ),
+        ),
+      );
+    }
+
+    final recordable = switch (approver) {
+      _Approver.marketingOfficer => PrototypeApprover.marketingOfficer,
+      _Approver.crm => PrototypeApprover.crm,
+      _Approver.buyingSource => null,
+    };
+    if (recordable == null) return;
+
+    final submission = await widget.repository.recordPrototypeApproval(
+      mobileNumber: widget.mobileNumber,
+      approver: recordable,
+    );
+    if (!mounted || submission == null) return;
+    setState(() => _submission = submission);
   }
 }
 

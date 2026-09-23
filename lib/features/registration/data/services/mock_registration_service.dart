@@ -94,7 +94,9 @@ class MockRegistrationService implements RegistrationService {
         'CSE-PR-${submittedAt.year}-'
         '${submittedAt.millisecondsSinceEpoch.remainder(1000000)}';
 
-    // The applicant can now sign in, but only to watch the approvals land.
+    // The applicant can now sign in, but only to watch the approvals land —
+    // and the buying source they named can now see the request, because the
+    // application carries that source's number with it.
     PendingRegistrations.add(
       PendingRegistration(
         reference: reference,
@@ -104,7 +106,30 @@ class MockRegistrationService implements RegistrationService {
         role: draft.role?.label ?? 'Installer',
         market: draft.market ?? '',
         verifyingSourceName: draft.verifyingSource?.matchedName,
+        // Only a source the directory matched can be asked to verify
+        // anything: an unmatched number belongs to nobody who can answer.
+        verifyingSourceNumber: draft.verifyingSource?.isFound == true
+            ? draft.verifyingSource!.mobileNumber
+            : null,
         submittedAt: submittedAt,
+        // Both are optional on the form and arrive as empty rather than
+        // absent; a row with nothing in it is worse than no row.
+        businessAddress: draft.businessAddress.trim().isEmpty
+            ? null
+            : draft.businessAddress.trim(),
+        alternateNumber: draft.alternateNumber.trim().isEmpty
+            ? null
+            : draft.alternateNumber.trim(),
+        shopLatitude: draft.shopLatitude?.toStringAsFixed(6),
+        shopLongitude: draft.shopLongitude?.toStringAsFixed(6),
+        // Every source but the one being asked to verify the application.
+        otherBuyingSources: [
+          for (final source in draft.buyingSources.skip(1))
+            source.matchedName ?? source.mobileNumber,
+        ],
+        videoLinks: draft.videoLinks,
+        shopImageSlots: draft.shopImagePaths.keys.toList(),
+        hasSelfie: draft.selfiePath != null,
       ),
     );
 
@@ -143,6 +168,24 @@ class MockRegistrationService implements RegistrationService {
       marketingOfficerState: stateOf(Approver.marketingOfficer),
       crmState: stateOf(Approver.crm),
     );
+  }
+
+  @override
+  Future<RegistrationSubmission?> recordPrototypeApproval({
+    required String mobileNumber,
+    required PrototypeApprover approver,
+  }) async {
+    await Future<void>.delayed(_latency);
+    final pending = PendingRegistrations.find(mobileNumber);
+    if (pending == null) return null;
+
+    pending.approvals[switch (approver) {
+          PrototypeApprover.marketingOfficer => Approver.marketingOfficer,
+          PrototypeApprover.crm => Approver.crm,
+        }] =
+        ApprovalState.approved;
+
+    return latestSubmission(mobileNumber);
   }
 
   /// Development support: clears issued OTPs, the submitted application and

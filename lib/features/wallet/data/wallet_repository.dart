@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/mock/partner_directory.dart';
+import '../../../core/mock/pending_registrations.dart';
 import '../../session/data/signed_in_user.dart';
 
 /// An amount in rupees, held as whole paisa so no total is ever a rounded
@@ -87,6 +88,7 @@ class LedgerEntry {
     required this.direction,
     required this.state,
     required this.type,
+    this.counterpartyNumber,
   });
 
   final LedgerType type;
@@ -99,10 +101,37 @@ class LedgerEntry {
   final LedgerDirection direction;
   final LedgerState state;
 
+  /// The partner on the other side of a transfer, so the person it was sent
+  /// to can be found without reading the line's wording. Null on anything
+  /// that has no other side, such as a prize or a CRM adjustment.
+  final String? counterpartyNumber;
+
   bool get isCredit => direction == LedgerDirection.credit;
 
   /// "+12,480" / "-3,000", as the ledger prints it.
   String get signedAmount => '${isCredit ? '+' : '-'}${amount.formatted}';
+
+  /// A held line settles or is returned; nothing else about it ever changes.
+  LedgerEntry withState(LedgerState value) => LedgerEntry(
+    id: id,
+    postedAt: postedAt,
+    title: title,
+    subtitle: subtitle,
+    amount: amount,
+    direction: direction,
+    state: value,
+    type: type,
+    counterpartyNumber: counterpartyNumber,
+  );
+}
+
+/// A transfer as the partner it was sent to sees it: the sender's own ledger
+/// line, and who sent it.
+class IncomingTransfer {
+  const IncomingTransfer({required this.entry, required this.fromNumber});
+
+  final LedgerEntry entry;
+  final String fromNumber;
 }
 
 /// Someone cash can be sent to.
@@ -265,10 +294,22 @@ class MockWalletRepository implements WalletRepository {
     return entry;
   }
 
-  List<LedgerEntry> _ledgerFor(SignedInUser user) => _ledgers.putIfAbsent(
-    PartnerDirectory.normalise(user.mobileNumber),
-    () => _seedFor(user),
-  );
+  List<LedgerEntry> _ledgerFor(SignedInUser user) =>
+      _ledgerForNumber(user.mobileNumber);
+
+  /// The ledger behind a number, whether or not that partner is the one
+  /// signed in — a transfer credits a wallet nobody is looking at.
+  List<LedgerEntry> _ledgerForNumber(String mobileNumber) {
+    final account = PartnerDirectory.find(mobileNumber);
+    return _ledgers.putIfAbsent(
+      PartnerDirectory.normalise(mobileNumber),
+      // Someone who registered on this phone is not in the directory and
+      // starts at zero; there is no opening history to carry over.
+      () => account == null
+          ? <LedgerEntry>[]
+          : _seedFor(SignedInUser.fromAccount(account)),
+    );
+  }
 
   @override
   Future<Money> balance(SignedInUser user) async {
@@ -331,16 +372,40 @@ class MockWalletRepository implements WalletRepository {
         .toList();
   }
 
+  /// Who a number belongs to, for the purposes of a transfer.
+  ///
+  /// The bundled directory first, then a registration submitted on this
+  /// phone that has all three approvals. A partner who registered here is a
+  /// partner: leaving them out would mean cash could never be sent to anyone
+  /// who joined after the directory was written.
+  ///
+  /// An application still waiting is deliberately nobody. They cannot open
+  /// the app to answer a transfer, so nothing may be sent to them.
+  CashRecipient? _partnerFor(String mobileNumber) {
+    final account = PartnerDirectory.find(mobileNumber);
+    if (account != null) {
+      return CashRecipient(
+        mobileNumber: account.mobileNumber,
+        name: account.displayName,
+        role: account.role,
+      );
+    }
+
+    final pending = PendingRegistrations.find(mobileNumber);
+    if (pending == null || !pending.isApproved) return null;
+    return CashRecipient(
+      mobileNumber: pending.mobileNumber,
+      name: pending.businessName,
+      role: pending.role,
+    );
+  }
+
   @override
   Future<CashRecipient?> lookupRecipient(String mobileNumber) async {
     await Future<void>.delayed(_latency);
-    final account = PartnerDirectory.find(mobileNumber);
-    if (account == null || !receivingRoles.contains(account.role)) return null;
-    return CashRecipient(
-      mobileNumber: account.mobileNumber,
-      name: account.displayName,
-      role: account.role,
-    );
+    final partner = _partnerFor(mobileNumber);
+    if (partner == null || !receivingRoles.contains(partner.role)) return null;
+    return partner;
   }
 
   @override
@@ -360,7 +425,7 @@ class MockWalletRepository implements WalletRepository {
       return const TransferResult.failed(TransferFailure.self);
     }
 
-    final account = PartnerDirectory.find(toMobileNumber);
+    final account = _partnerFor(toMobileNumber);
     if (account == null || !receivingRoles.contains(account.role)) {
       return const TransferResult.failed(TransferFailure.unknownRecipient);
     }
@@ -374,7 +439,7 @@ class MockWalletRepository implements WalletRepository {
     final entry = LedgerEntry(
       id: 'TX-${_nextId++}',
       postedAt: DateTime.now(),
-      title: 'Sent to ${account.displayName}',
+      title: 'Sent to ${account.name}',
       subtitle: note == null || note.isEmpty
           ? '${account.role} · ${account.mobileNumber}'
           : note,
@@ -382,6 +447,7 @@ class MockWalletRepository implements WalletRepository {
       direction: LedgerDirection.debit,
       state: LedgerState.held,
       type: LedgerType.sendCash,
+      counterpartyNumber: PartnerDirectory.normalise(toMobileNumber),
     );
 
     _ledgerFor(from).add(entry);
@@ -389,7 +455,66 @@ class MockWalletRepository implements WalletRepository {
     return TransferResult.success(entry, held: true);
   }
 
-  /// Opening history, so a wallet is never empty on first sight.
+  /// Transfers sent to this partner, whatever has become of them, newest
+  /// first. This is what the Cash Request inbox lists: a transfer is one
+  /// record, held on the sender's ledger, seen from the other end.
+  List<IncomingTransfer> incomingTransfers(String mobileNumber) {
+    final needle = PartnerDirectory.normalise(mobileNumber);
+    return [
+      for (final ledger in _ledgers.entries)
+        for (final entry in ledger.value)
+          if (entry.type == LedgerType.sendCash &&
+              entry.counterpartyNumber == needle)
+            IncomingTransfer(entry: entry, fromNumber: ledger.key),
+    ]..sort((a, b) => b.entry.postedAt.compareTo(a.entry.postedAt));
+  }
+
+  /// Settles a held transfer, which is the one moment the money is in two
+  /// wallets' accounting at once and so has to happen together: approving
+  /// releases the sender's hold and credits the receiver, rejecting returns
+  /// it to the sender and credits nobody.
+  ///
+  /// False when there is no such transfer, or it was already decided.
+  bool settleTransfer({required String id, required bool approved}) {
+    for (final ledger in _ledgers.entries) {
+      final index = ledger.value.indexWhere((entry) => entry.id == id);
+      if (index < 0) continue;
+
+      final entry = ledger.value[index];
+      if (entry.state != LedgerState.held) return false;
+
+      // Cleared, not removed: the money really did leave the sender. It
+      // simply stops being held, which is what takes it out of their held
+      // total while leaving the line in their history.
+      ledger.value[index] = entry.withState(
+        approved ? LedgerState.cleared : LedgerState.rejected,
+      );
+
+      if (approved) {
+        final sender = _partnerFor(ledger.key);
+        _ledgerForNumber(entry.counterpartyNumber!).add(
+          LedgerEntry(
+            id: 'RX-${_nextId++}',
+            postedAt: DateTime.now(),
+            title: 'Received from ${sender?.name ?? 'a partner'}',
+            subtitle: entry.subtitle,
+            amount: entry.amount,
+            direction: LedgerDirection.credit,
+            state: LedgerState.cleared,
+            type: LedgerType.cashRequest,
+            counterpartyNumber: ledger.key,
+          ),
+        );
+      }
+
+      _announce();
+      return true;
+    }
+    return false;
+  }
+
+  /// Opening history, so a wallet is never empty on first sight. Only the
+  /// partners the directory knows get one — see [_ledgerForNumber].
   List<LedgerEntry> _seedFor(SignedInUser user) {
     final now = DateTime.now();
     DateTime daysAgo(int days) => now.subtract(Duration(days: days));

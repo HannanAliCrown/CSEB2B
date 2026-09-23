@@ -7,6 +7,7 @@ import 'package:cse_b2b/app/router/route_not_found_screen.dart';
 import 'package:cse_b2b/features/auth/data/repositories/auth_repository.dart';
 import 'package:cse_b2b/features/auth/data/services/device_identity_store.dart';
 import 'package:cse_b2b/features/auth/data/services/http_auth_service.dart';
+import 'package:cse_b2b/features/auth/data/services/mock_auth_service.dart';
 import 'package:cse_b2b/features/auth/data/services/session_store.dart';
 import 'package:cse_b2b/features/auth/ui/view_models/home_view_model.dart';
 import 'package:cse_b2b/features/auth/ui/view_models/login_view_model.dart';
@@ -40,6 +41,7 @@ import 'package:cse_b2b/features/points/ui/views/send_points_screen.dart';
 import 'package:cse_b2b/features/points/ui/views/targets_screen.dart';
 import 'package:cse_b2b/features/profile/data/contacts_repository.dart';
 import 'package:cse_b2b/features/profile_requests/data/profile_requests_service.dart';
+import 'package:cse_b2b/features/profile_requests/ui/views/profile_request_detail_screen.dart';
 import 'package:cse_b2b/features/profile_requests/ui/views/profile_requests_screen.dart';
 import 'package:cse_b2b/features/profile/data/profile_settings_service.dart';
 import 'package:cse_b2b/features/profile/ui/views/app_security_page.dart';
@@ -130,8 +132,11 @@ abstract final class AppRoutes {
   /// The notification centre, which the bell on Home opens.
   static const notifications = '/notifications';
 
-  /// Registrations naming this partner as their buying source.
+  /// Registrations naming this partner as their buying source: the inbox,
+  /// and the one request a verdict is given on.
   static const profileRequests = '/profile-requests';
+  static String profileRequest(String applicationId) =>
+      '/profile-requests/$applicationId';
 
   /// Transfers waiting on this partner to approve or reject.
   static const cashRequests = '/wallet/cash-requests';
@@ -196,15 +201,20 @@ GoRouter createAppRouter({
   RegistrationDraftStore? registrationDraftStore,
   MediaCaptureService? mediaCapture,
 }) {
+  final prefs = preferences ?? SharedAppPreferences();
+
+  // Sign-in and device binding. Without a server there is nothing to ask, so
+  // the bundled directory answers instead and a phone that has verified a
+  // code once counts as the phone the account is on.
   final repository =
       authRepository ??
       AuthRepository(
-        authService: HttpAuthService(),
+        authService: _serverBacked
+            ? HttpAuthService()
+            : MockAuthService(preferences: prefs),
         deviceIdentityStore: SecureDeviceIdentityStore(),
         sessionStore: SecureSessionStore(),
       );
-
-  final prefs = preferences ?? SharedAppPreferences();
 
   final onboarding = OnboardingRepository(
     preferences: prefs,
@@ -282,7 +292,7 @@ GoRouter createAppRouter({
   // long as the process does.
   final cashRequests = _serverBacked
       ? HttpCashRequestsService(baseUrl: apiBaseUrl)
-      : MockCashRequestsService();
+      : MockCashRequestsService(wallet: wallet as MockWalletRepository);
 
   // Inaam prizes are money. The mock credits the same wallet the wheel is
   // spun against, so a prize shown is a prize in the balance.
@@ -625,7 +635,22 @@ GoRouter createAppRouter({
       ),
       GoRoute(
         path: AppRoutes.profileRequests,
-        builder: (context, state) => signedIn(const ProfileRequestsScreen()),
+        builder: (context, state) => signedIn(
+          ProfileRequestsScreen(
+            onOpenRequest: (applicationId) =>
+                context.push<void>(AppRoutes.profileRequest(applicationId)),
+          ),
+        ),
+        routes: [
+          GoRoute(
+            path: ':applicationId',
+            builder: (context, state) => signedIn(
+              ProfileRequestDetailScreen(
+                applicationId: state.pathParameters['applicationId']!,
+              ),
+            ),
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.notifications,
@@ -635,6 +660,7 @@ GoRouter createAppRouter({
             // rest say so rather than going nowhere on a tap.
             onOpenDestination: (route) async {
               if (route != AppRoutes.ledger &&
+                  route != AppRoutes.profileRequests &&
                   !route.startsWith('${AppRoutes.complaints}/')) {
                 return false;
               }

@@ -84,10 +84,13 @@ class MyQrCodeScreen extends StatelessWidget {
                   icon: LucideIcons.banknoteArrowUp,
                   text: 'Send cash to you',
                 ),
-              const _UseLine(
-                icon: LucideIcons.award,
-                text: 'Send points to you',
-              ),
+              // Only the three trading roles may exchange points, so an
+              // installer's code cannot be used to send them any.
+              if (user.role != PartnerRole.installer)
+                const _UseLine(
+                  icon: LucideIcons.award,
+                  text: 'Send points to you',
+                ),
             ],
           ),
         ),

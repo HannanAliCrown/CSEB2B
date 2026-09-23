@@ -159,6 +159,14 @@ class HttpRegistrationService implements RegistrationService {
     return _submissionFrom(body);
   }
 
+  /// Approvals are recorded in CRM, not from the applicant's phone, so this
+  /// writes nothing and simply answers with what the server holds.
+  @override
+  Future<RegistrationSubmission?> recordPrototypeApproval({
+    required String mobileNumber,
+    required PrototypeApprover approver,
+  }) => latestSubmission(mobileNumber);
+
   /// The wizard's draft as the application endpoint expects it. Media travels
   /// as rows rather than columns, so the three video slots and three image
   /// slots do not each need a field of their own.
