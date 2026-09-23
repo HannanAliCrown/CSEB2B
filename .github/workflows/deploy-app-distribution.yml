@@ -56,6 +56,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # prototype_server is a separate Dart package, and `flutter analyze`
+      # covers the whole repository. Without its own dependencies resolved,
+      # every import in it reports as missing and analysis fails on code the
+      # app does not even ship.
+      - name: Install prototype_server dependencies
+        working-directory: prototype_server
+        run: dart pub get
+
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
 
