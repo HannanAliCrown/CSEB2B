@@ -1,3 +1,10 @@
+// Golden images compare rendered pixels, which depend on the machine's own
+// font rasterisation. They are a developer's tool for catching an unintended
+// visual change locally, so CI excludes them with `--exclude-tags golden`
+// rather than failing a build over a difference that is not a defect.
+@Tags(['golden'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
