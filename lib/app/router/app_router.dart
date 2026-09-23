@@ -69,6 +69,7 @@ import 'package:cse_b2b/features/login/ui/views/login_flow_screen.dart';
 import 'package:cse_b2b/features/registration/data/repositories/registration_repository.dart';
 import 'package:cse_b2b/features/registration/data/services/media_capture_service.dart';
 import 'package:cse_b2b/features/registration/data/services/http_registration_service.dart';
+import 'package:cse_b2b/features/registration/data/services/mock_registration_service.dart';
 import 'package:cse_b2b/features/registration/data/services/registration_draft_store.dart';
 import 'package:cse_b2b/features/registration/data/services/registration_service.dart';
 import 'package:cse_b2b/features/registration/ui/view_models/registration_flow_view_model.dart';
@@ -86,6 +87,17 @@ const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'http://10.0.2.2:8080',
 );
+
+/// Whether the features that have been moved to the database read from it.
+///
+/// Off by default, so a build with no server running still opens on the mock
+/// data everyone knows. Turn it on with
+/// `--dart-define=DATA_SOURCE=server`.
+///
+/// This is a migration switch, not a permanent setting: it goes away once
+/// every feature is server-backed.
+const bool _serverBacked =
+    String.fromEnvironment('DATA_SOURCE', defaultValue: 'mock') == 'server';
 
 /// Route paths, so callers never spell a location as a bare string.
 abstract final class AppRoutes {
@@ -197,24 +209,35 @@ GoRouter createAppRouter({
   final onboarding = OnboardingRepository(
     preferences: prefs,
     permissions: permissions ?? const DevicePermissionService(),
-    launchService: HttpDeviceLaunchService(
-      identity: SecureDeviceIdentityStore(),
-      baseUrl: apiBaseUrl,
-      platform: defaultTargetPlatform.name,
-    ),
+    launchService: _serverBacked
+        ? HttpDeviceLaunchService(
+            identity: SecureDeviceIdentityStore(),
+            baseUrl: apiBaseUrl,
+            platform: defaultTargetPlatform.name,
+          )
+        : const NoDeviceLaunchService(),
   );
 
+  // No registration API exists yet, so the local mock stands in behind the
+  // same repository boundary an HTTP service will use later.
   final registration = RegistrationRepository(
     service:
-        registrationService ?? HttpRegistrationService(baseUrl: apiBaseUrl),
+        registrationService ??
+        (_serverBacked
+            ? HttpRegistrationService(baseUrl: apiBaseUrl)
+            : MockRegistrationService()),
     draftStore: registrationDraftStore ?? SharedRegistrationDraftStore(),
   );
   final capture = mediaCapture ?? DeviceMediaCaptureService();
 
+  // The signed-in partner, the wallet and the scanner. All three are mocks
+  // behind the same repository boundaries their APIs will use later.
   final session = SessionController(
     repository: SessionRepository(
       preferences: prefs,
-      service: HttpSessionService(baseUrl: apiBaseUrl),
+      service: _serverBacked
+          ? HttpSessionService(baseUrl: apiBaseUrl)
+          : const MockSessionService(),
     ),
   );
   // Money is database-backed only, like the points ledger, Inaam prizes and
@@ -263,7 +286,9 @@ GoRouter createAppRouter({
   // recent scanning and existing board.
   final branding = BrandingService(baseUrl: apiBaseUrl);
 
-  final space = HttpSpaceRepository(baseUrl: apiBaseUrl);
+  final space = _serverBacked
+      ? HttpSpaceRepository(baseUrl: apiBaseUrl)
+      : MockSpaceRepository();
 
   /// Everything behind sign-in shares one session and one wallet, so a
   /// transfer made on one screen is the balance another screen shows.
