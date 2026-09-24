@@ -44,6 +44,26 @@ changes are reflected in "Prototype Business-Rule Enforcement &
 Atomicity" and "UI State Implementation" below. **Registration (FR-001–
 FR-005) is unaffected and is not re-planned here.**
 
+**Reconciliation (2026-09-24)**: this plan was re-checked against the
+code. Both revisions above are built. Two Flutter login flows now exist:
+
+- **Live** — `/login` renders `LoginFlowScreen`
+  (`lib/features/login/ui/views/login_flow_screen.dart`), the Claude
+  Design board-02 screens. It is a `StatefulWidget` that calls
+  `AuthRepository` directly (no ViewModel), then signs the partner in
+  through `SessionController` (`lib/features/session/`), which loads the
+  partner profile and owns the saved session. Its copy is hard-coded
+  English.
+- **Legacy** — `/login/legacy`, `/register/legacy`, `/home/legacy`
+  render the earlier `LoginScreen` / `RegistrationScreen` / `HomeScreen`
+  with `LoginViewModel` / `RegistrationViewModel` / `HomeViewModel`
+  (`lib/features/auth/ui/`), localized via ARB.
+
+Both use the same `AuthRepository` → `HttpAuthService` →
+`prototype_server` path for every device-binding decision. Session
+restoration differs: only the legacy route validates device binding
+(see the "Persisted-session validation" row below).
+
 ## Summary
 
 Partners sign in with only a registered mobile number. First contact with
@@ -61,14 +81,15 @@ and beyond) needs an externally sourced rebinding-authorization decision
 of Authorized *before* any OTP is requested. Either path, once satisfied,
 atomically revokes whatever the new device replaces (including a
 conflicting binding on another account). "Keep Me Signed In" persists
-only a local session record, always re-validated against current
-device-binding state, and remains completely independent of device-move
-tiering in both directions.
+only local session records — re-validated against current device-binding
+state on the legacy route only, not on the live route (spec FR-033) — and
+remains completely independent of device-move tiering in both directions.
 
 Technically: the existing `View → ViewModel → Repository → Service`
-architecture gains one new Flutter feature module, `lib/features/auth/`,
+architecture gains the Flutter feature module `lib/features/auth/`,
 whose `AuthRepository` depends on an `AuthService` interface implemented
-by `HttpAuthService`. `HttpAuthService` calls a new, separate local
+by `HttpAuthService` (plus the live screens in `lib/features/login/` —
+see "Reconciliation" above). `HttpAuthService` calls a new, separate local
 process — `prototype_server/`, a small Dart/`shelf` HTTP server — which is
 the **only** thing that ever opens a PostgreSQL connection and the only
 place device-binding/rebinding business rules are actually decided. Moving
@@ -97,9 +118,10 @@ Flutter dependency), using the same Dart SDK.
 **exclusively by `prototype_server/`**, as the prototype's sole
 authoritative store for `accounts`, `devices`, `account_device_bindings`,
 `otp_challenges`, and `rebinding_authorizations` (schema: `data-model.md`).
-The local session record ("Keep Me Signed In") lives only in
-`flutter_secure_storage` on the device, never in PostgreSQL, and is never
-touched by `prototype_server`.
+The local session records ("Keep Me Signed In") live only on the device,
+never in PostgreSQL: the `Session` record in `flutter_secure_storage`, and
+the live path's signed-in partner record in `shared_preferences`
+(`data-model.md` → Local-only entities).
 
 **Testing**: Two independent tiers (`research.md` → "Testing approach"):
 (1) `flutter_test` for the Flutter app — ViewModels and `AuthRepository`
@@ -120,7 +142,7 @@ own machine only — it is never built for or deployed to a mobile device.
 **Project Type**: Mobile app (Flutter) plus one local-only prototype
 backend process (`prototype_server/`, plain Dart). This is *not* a
 traditional frontend/backend product split — `prototype_server` is never
-deployed, ships to no user, and exists solely because FR-035 forbids the
+deployed, ships to no user, and exists solely because FR-038 forbids the
 Flutter client from reaching PostgreSQL itself. See Complexity Tracking
 below for why this additional process is justified rather than avoided.
 
@@ -144,7 +166,7 @@ non-committed environment configuration (`quickstart.md`).
 covering registration, login, OTP (both contexts), device-conflict/
 rebinding, Keep Me Signed In, session restoration, and logout, across 4
 identical-logic user types — plus one small local server package
-(`prototype_server/`) exposing the 8 operations in
+(`prototype_server/`) exposing the 9 operations in
 `contracts/auth-service.md` as REST endpoints. The exact number of Flutter
 screens/dialogs/snackbars is not fixed here (see "UI State Implementation"
 below); the Required UI States list in `spec.md` is a state inventory, not
@@ -156,23 +178,23 @@ a screen-count.
 
 | Principle | Status | Notes |
 |---|---|---|
-| I. Spec-Driven Development | **Pass** | `spec.md` exists, reviewed and twice revised; this plan (now itself revised once, for the FR-035 correction) derives from it, not from ad-hoc chat instructions. |
+| I. Spec-Driven Development | **Pass** | `spec.md` exists, reviewed and twice revised; this plan (now itself revised once, for the FR-038 correction) derives from it, not from ad-hoc chat instructions. |
 | II. Approved Design Is Authoritative | **Pass (deferred action noted)** | Claude Design tokens are currently provisional (`docs/DESIGN_SYSTEM.md`); a Claude Design MCP sync (`/design-login`) is required before screens are built in `/speckit-implement`, and the exact screen/dialog/state breakdown is determined then (see "UI State Implementation"), not invented here. |
-| III. Simple MVVM | **Pass** | `View → ViewModel → Repository → Service`, no new Flutter-side layer. `AuthRepository` is now deliberately thin — it calls `AuthService` and translates the result for the ViewModel; it holds no independent copy of device-trust/rebinding logic, since that now lives in `prototype_server` (see "Prototype Business-Rule Enforcement Boundary" below). This is a *simplification* versus the original draft, not a new layer. |
+| III. Simple MVVM | **Pass** | `View → ViewModel → Repository → Service`, no new Flutter-side layer. `AuthRepository` is now deliberately thin — it calls `AuthService` and translates the result for the ViewModel; it holds no independent copy of device-trust/rebinding logic, since that now lives in `prototype_server` (see "Prototype Business-Rule Enforcement Boundary" below). This is a *simplification* versus the original draft, not a new layer. **As built, the live `LoginFlowScreen` has no ViewModel** — the view holds the flow state and calls `AuthRepository` and `SessionController` itself; only the legacy route uses `LoginViewModel`. |
 | IV. Centralized Design System | **Pass** | All new screens use `lib/core/theme/` tokens exclusively; `prototype_server` has no UI. |
 | V. Minimum Necessary Dependencies | **Pass** | Flutter gains `http`, `flutter_secure_storage`, `uuid`, each tied to a specific FR. `postgres`/`shelf`/`shelf_router` belong only to `prototype_server`, never the Flutter app. No framework substitution. |
-| VI. Scope Discipline | **Pass, with a flagged addition** | Touches `lib/features/auth/` (new), `app_router.dart` (add routes), and now also introduces `prototype_server/` as a sibling package — a larger footprint than a typical single-feature change, justified in Complexity Tracking below because FR-035 leaves no smaller option. `lib/features/bootstrap/` is superseded as the initial route (README: "should be deleted once the first real feature ships"); removal is deferred to `/speckit-tasks` as an explicit task. |
+| VI. Scope Discipline | **Pass, with a flagged addition** | Touches `lib/features/auth/` (new), `app_router.dart` (add routes), and now also introduces `prototype_server/` as a sibling package — a larger footprint than a typical single-feature change, justified in Complexity Tracking below because FR-038 leaves no smaller option. `lib/features/bootstrap/` was superseded as the initial route and has been removed (T087). |
 | VII. Testable Boundaries | **Pass** | Flutter: ViewModel/Repository response-mapping tested via a fake `AuthService`. `prototype_server`: its own request-handling logic tested via a fake data layer, independent of a live database. |
-| VIII. Localization and Accessibility | **Pass** | Every new Flutter user-visible string goes into the ARB files; `prototype_server` has no UI and needs no localization. |
+| VIII. Localization and Accessibility | **Pass (legacy screens) / Gap (live screens)** | The legacy auth screens use ARB strings; the live `LoginFlowScreen`/`SignInScreen` copy is hard-coded English. `prototype_server` has no UI and needs no localization. |
 | IX. Verification | **Pass, two gates** | Flutter: `dart format .`, `flutter analyze`, `flutter test` (unchanged). `prototype_server`, being a separate Dart package, gets the equivalent `dart format .`, `dart analyze`, `dart test` run inside `prototype_server/` before a task touching it is complete — both are environment-appropriate, neither hidden. `quickstart.md`'s live-PostgreSQL scenarios remain a separate, explicitly-called-out manual tier. |
-| X. No Overengineering | **Pass** | `prototype_server` is the smallest thing that makes FR-035 literally true: one HTTP server library (`shelf`), one router, one driver — no ORM, no auth framework, no `BaseController`/`BaseRepository`, no speculative endpoints beyond `contracts/auth-service.md`'s 8 operations. Still no `BaseViewModel`/`BaseRepository`/`BaseService`, no generic `Result<T>`, no service locator, no fake CRM UI, no multi-device Active state. |
+| X. No Overengineering | **Pass** | `prototype_server` is the smallest thing that makes FR-038 literally true: one HTTP server library (`shelf`), one router, one driver — no ORM, no auth framework, no `BaseController`/`BaseRepository`, no speculative endpoints beyond `contracts/auth-service.md`'s 9 operations. Still no `BaseViewModel`/`BaseRepository`/`BaseService`, no generic `Result<T>`, no service locator, no fake CRM UI, no multi-device Active state. |
 | Technology Constraints | **Pass** | `provider` + `go_router` reused as confirmed present; Android 8+/iOS 15+ portrait-only. No secrets invented — all PostgreSQL connection details are local, non-committed configuration read by `prototype_server` only, never by the Flutter app. |
 
 ### Post-Phase-1 re-check
 
 Re-evaluated after `research.md`, `data-model.md`,
 `contracts/auth-service.md`, and `quickstart.md` were revised for the
-FR-035 correction: no dependency, layer, or framework beyond what is
+FR-038 correction: no dependency, layer, or framework beyond what is
 already justified above was introduced during design. Moving business-rule
 enforcement into `prototype_server` *removed* logic from `AuthRepository`
 rather than adding any — the net client-side complexity is lower than the
@@ -190,16 +212,16 @@ against PostgreSQL, never in the Flutter app:
 |---|---|
 | At most one Active device per account | `account_device_bindings_one_active_per_account` partial unique index (`data-model.md`) — a second `INSERT` of an `active` row for the same account fails at the database level, not just in application logic. |
 | At most one account owning a device as Active (no device-conflict double-Active) | `account_device_bindings_one_active_per_device` partial unique index (`data-model.md`) — same structural guarantee, keyed on `device_id`. |
-| Atomic device rebinding / atomic device-conflict transfer, at either tier | `prototype_server`'s `completeRebinding` handler wraps the revoke-old / activate-new / revoke-conflicting-binding writes in **one PostgreSQL transaction**; if any write fails (including a unique-index violation), the whole transaction rolls back, so the two indexes above are never observed to be violated even transiently, and no step is left half-applied. This is identical regardless of which tier gated the requester's path to this operation. |
+| Atomic device rebinding / atomic device-conflict transfer, at either tier | `PostgresAuthDataStore.completeRebinding` (called by `POST /rebindings`) wraps the OTP/tier/authorization re-checks and the revoke-old / revoke-conflicting-binding / activate-new writes in **one PostgreSQL transaction**; if any write fails (including a unique-index violation), the whole transaction rolls back and the route returns `409`, so the two indexes above are never observed to be violated even transiently, and no step is left half-applied. This is identical regardless of which tier gated the requester's path to this operation. |
 | Registration initial-binding atomicity (FR-043) | `prototype_server`'s `verifyRegistrationOtp` handler performs OTP verification and the initial `account_device_bindings` insert in one transaction: the OTP row is only marked `verified` and the binding row only committed together. If the insert fails, the transaction rolls back — including the OTP's `verified` flag — so the account never appears registered without a persisted Active device (see "Registration Transaction Semantics" below). **Unchanged by this revision — registration is out of scope for this feature.** |
 | OTP verification required before initial binding | `verifyRegistrationOtp` is the only handler that can write an `initial_registration` binding row, and it only does so after checking `otp_challenges.verified` within the same transaction. |
 | **Device-move tier determination (FR-015)** — *new in this revision* | `evaluateLogin` computes the requesting account's device-move count as `SELECT count(*) FROM account_device_bindings WHERE account_id = $1 AND context = 'rebinding'` (no new column; see `data-model.md`) and returns the resulting tier (`second_device` / `third_or_later`) to the client as part of its response. The Flutter client never computes or assumes this itself (FR-046) — it only branches its UI on the tier value the server returned. |
-| **Device-conflict detection precedes tiering and OTP (FR-013/FR-014)** — *new in this revision* | `evaluateLogin` checks whether the target device currently has *any* `active` binding row for a **different** account **before** it computes the tier above or returns any OTP-request instruction. If so, its response carries a `conflict` flag (naming the other account) instead of proceeding straight to a tier result; the Flutter client MUST show the confirmation step (Claude Design A4) and call a distinct "confirm takeover" endpoint before `evaluateLogin`'s tier-gated flow resumes. Declining performs no write at all. |
-| **Second-device tier: OTP alone, no authorization check (FR-016)** — *revised* | For `tier = second_device`, `prototype_server` routes directly from `requestLoginOtp` → `verifyLoginOtp` → `completeRebinding`. It never calls, checks, or creates a `rebinding_authorizations` row for this path — `checkRebindingAuthorization` is simply not invoked. This corrects the prior implementation, which called OTP verification for every New/Untrusted device without first branching on tier. |
-| **Third-or-later tier: authorization before OTP (FR-017/FR-018)** — *reversed from the prior implementation* | For `tier = third_or_later`, `prototype_server` requires `checkRebindingAuthorization` to return `Authorized` **before** `requestLoginOtp` will issue a challenge for that account/device pair; `requestLoginOtp` itself re-checks the authorization status server-side and refuses to issue an OTP if it is Pending or Not Authorized, rather than trusting the client to have checked first. This is the opposite call order from the previously implemented `login_otp_routes.dart` (OTP first, authorization second) and is the one behavior change this revision requires in `prototype_server`'s route logic (not built in this pass — see `tasks.md`). |
+| **Device-conflict detection precedes tiering and OTP (FR-013/FR-014)** — *new in this revision* | `evaluateLogin` checks whether the target device currently has *any* `active` binding row for a **different** account before computing the tier. Its response carries both `conflict` (`{otherAccountId}` — the other account's id only, not its name) and `tier`; the Flutter client shows the confirmation step (Claude Design A4) first and calls `POST /login/confirm-takeover` before requesting any OTP. Declining performs no write at all. **The server does not record or require the confirmation** — `completeRebinding` transfers a conflicting device whether or not confirm-takeover was called. |
+| **Second-device tier: OTP alone, no authorization check (FR-016)** — *revised* | For `tier = second_device`, the client goes `requestLoginOtp` → `verifyLoginOtp` → `completeRebinding`. `requestLoginOtp` and `completeRebinding` each re-derive the tier and, at this tier, never read or create a `rebinding_authorizations` row; the client never calls `checkRebindingAuthorization`. |
+| **Third-or-later tier: authorization before OTP (FR-017/FR-018)** — *reversed from the prior implementation* | For `tier = third_or_later`, the client calls `checkRebindingAuthorization` first and shows B1 unless it is `authorized`. Independently, `requestLoginOtp` re-derives the tier and refuses (`403 not_authorized`, creating a `pending` row if none exists) unless the latest authorization for the pair is `authorized`, and `completeRebinding` re-checks it again inside its transaction. Built (Phase 13). |
 | Pending / Authorized / Not Authorized rebinding state | `rebinding_authorizations.status` (`data-model.md`), written only by `prototype_server` (simulating the external/CRM decision — see `quickstart.md`'s seed-data note); never writable by the Flutter client (FR-028). Per FR-022/FR-016, this table is now conceptually scoped to the third-or-later tier only — a stray row for a second-device-tier account/device pair is never consulted. |
 | Revoked-device behavior | `getDeviceBindingStatus`/`evaluateLogin` read `account_device_bindings` fresh on every call; a `revoked` row (or no `active` row at all) always classifies the device New/Untrusted — there is no cache or flag on the Flutter side that could let a revoked device "remember" trust. Re-attempting from a Revoked device is re-tiered against the account's *current* move count, never the count that applied when that device was first bound. |
-| Persisted-session validation against current device binding | `AuthRepository` calls `getDeviceBindingStatus` (via `HttpAuthService` → `prototype_server`) on every session restoration attempt (FR-033); the local `Session` record itself carries no authority, only a reference to check. Independent of tiering in both directions (FR-030). |
+| Persisted-session validation against current device binding | **Legacy route only.** `AuthRepository.restoreSession` calls `getDeviceBindingStatus` (via `HttpAuthService` → `prototype_server`) when `/login/legacy` is opened (FR-033); the local `Session` record carries no authority. **The live `/login` and signed-in routes restore through `SessionController.restore()`, which reads the saved partner record and does not check device binding — FR-033 is Not implemented there.** Independent of tiering in both directions (FR-030). |
 
 **This is prototype business-rule enforcement, not a production security
 boundary.** `prototype_server` runs unauthenticated, in plaintext HTTP, on
@@ -232,7 +254,7 @@ transaction in `prototype_server`:
    the OTP row is **not** left `verified`, and no binding row exists. The
    caller sees a failure outcome and may retry from OTP submission.
 
-This is exactly FR-040: successful OTP verification alone is never, by
+This is exactly FR-043: successful OTP verification alone is never, by
 itself, observable as "registration succeeded" — the two things are
 committed together or not at all.
 
@@ -244,17 +266,17 @@ deferred has since happened. The Login journey board in
 which now supersede the earlier placeholder grouping below wherever they
 overlap:
 
-| Claude Design screen | Required UI State it covers | Tier / gate it belongs to |
-|---|---|---|
-| **A1** Sign in | Login, login validation, login loading, authentication failure | All |
-| **A2** New device SMS code | OTP entry for new-device login | Second-device tier (OTP-only), and third-or-later tier once Authorized |
-| **A3** Wrong code → lockout | Invalid OTP (plain error styling only — its lockout card is explicitly NOT implemented; see `spec.md` Design Note) | Both tiers |
-| **A4** Takeover/conflict dialog | Device-conflict confirmation, shown *before* OTP | Precedes both tiers |
-| **B1** Refused/locked | Third-or-later-tier "locked, not yet authorized" state — shown *instead of* an OTP screen | Third-or-later tier, Pending/Not Authorized |
-| **B2** CRM-authorized rebind | Third-or-later-tier "authorized, verify" state, OTP shown alongside a CRM-allowed banner | Third-or-later tier, Authorized |
-| **B3** Session expired | Invalid/expired session | Session (tier-independent) |
-| **B4** Account deactivated | Authentication failure (account-level) | All |
-| **C1** PIN unlock / **C2** valid-session-no-PIN | Session restoration | Session (tier-independent) |
+| Claude Design screen | Required UI State it covers | Tier / gate it belongs to | As built (live `/login`) |
+|---|---|---|---|
+| **A1** Sign in | Login, login loading, authentication failure (no client-side validation state — see spec Edge Cases) | All | `SignInScreen` (`lib/features/login/ui/views/sign_in_screen.dart`) |
+| **A2** New device SMS code | OTP entry for new-device login, 30-second resend countdown | Second-device tier (OTP-only), and third-or-later tier once Authorized | `LoginFlowScreen` verify step |
+| **A3** Wrong code → lockout | Invalid OTP (plain error styling only — its lockout card is explicitly NOT implemented; see `spec.md` Design Note) | Both tiers | Verify step error row |
+| **A4** Takeover/conflict dialog | Device-conflict confirmation, shown *before* OTP | Precedes both tiers | Inline dialog in `LoginFlowScreen`; generic copy, no before/after account naming |
+| **B1** Refused/locked | Third-or-later-tier "locked, not yet authorized" state — shown *instead of* an OTP screen | Third-or-later tier, Pending/Not Authorized | `LoginFlowScreen` locked step, "Try Again" re-evaluates |
+| **B2** CRM-authorized rebind | Third-or-later-tier "authorized, verify" state, OTP shown alongside a CRM-allowed banner | Third-or-later tier, Authorized | Verify step with "CRM has allowed one move" notice |
+| **B3** Session expired | Invalid/expired session | Session (tier-independent) | **Not implemented** in the live flow (`SessionExpiredScreen` is design-preview only) |
+| **B4** Account deactivated | Authentication failure (account-level) | All | **Not implemented** (`accounts.status` only allows `active`) |
+| **C1** PIN unlock / **C2** valid-session-no-PIN | Session restoration | Session (tier-independent) | C1 is the app-PIN `PinGate` owned by the profile feature; C2 is the router redirect from `/login` to `/home` |
 
 This table is the concrete realization of the Required UI States list in
 `spec.md`; it replaces that list's earlier "not yet determined" framing
@@ -297,82 +319,107 @@ lib/
 ├── main.dart
 ├── app/
 │   └── router/
-│       └── app_router.dart          # gains this feature's routes
+│       └── app_router.dart          # /login (live), /login/legacy,
+│                                    # /register/legacy, /home/legacy; the
+│                                    # session redirect
 ├── core/
-│   ├── localization/                # gains this feature's ARB strings
-│   └── theme/                       # unchanged; consumed, not extended
+│   ├── localization/                # ARB strings for the legacy auth screens
+│   └── theme/                       # consumed, not extended
 └── features/
-    ├── bootstrap/                   # superseded as initial route by this feature (removal: /speckit-tasks)
-    └── auth/
-        ├── data/
-        │   ├── models/              # Account, Device, AccountDeviceBinding,
-        │   │                        # OtpChallenge, RebindingAuthorization,
-        │   │                        # Session — mirroring data-model.md;
-        │   │                        # plain DTOs (de)serialized to/from
-        │   │                        # HttpAuthService's HTTP calls
-        │   ├── repositories/
-        │   │   └── auth_repository.dart      # thin: calls AuthService, maps
-        │   │                                  # results — no business rules
-        │   └── services/
-        │       ├── auth_service.dart          # interface (contracts/auth-service.md)
-        │       ├── http_auth_service.dart      # the one implementation — calls
-        │       │                               # prototype_server now, the real
-        │       │                               # API later (base URL differs)
-        │       ├── device_identity_store.dart # local UUID via flutter_secure_storage
-        │       └── session_store.dart         # local Session record via flutter_secure_storage
-        └── ui/
-            ├── views/                # grouped by flow (registration, login,
-            │                         # new-device/rebinding, session) — exact
-            │                         # screen/dialog/snackbar breakdown set
-            │                         # during /speckit-implement per Claude
-            │                         # Design MCP inspection, not here
-            ├── view_models/          # one per flow
-            └── widgets/              # shared pieces only if reuse actually
-                                       # appears (e.g., an OTP input field used
-                                       # by both registration and login flows)
+    ├── auth/
+    │   ├── data/
+    │   │   ├── models/
+    │   │   │   ├── account.dart      # UserType + Account (only DTOs built;
+    │   │   │   └── session.dart      # the others in data-model.md are not)
+    │   │   ├── repositories/
+    │   │   │   └── auth_repository.dart      # thin: calls AuthService, maps
+    │   │   │                                  # results; Session persist/
+    │   │   │                                  # restore/logout
+    │   │   └── services/
+    │   │       ├── auth_service.dart          # interface + result types
+    │   │       ├── http_auth_service.dart      # the one implementation
+    │   │       ├── device_identity_store.dart # local UUID via flutter_secure_storage
+    │   │       └── session_store.dart         # local Session record via flutter_secure_storage
+    │   └── ui/                       # legacy routes only
+    │       ├── views/                # login_screen, registration_screen, home_screen
+    │       ├── view_models/          # login_, registration_, home_view_model
+    │       └── widgets/              # auth_info_banner, auth_primary_button,
+    │                                 # crown_solar_logo, device_conflict_dialog,
+    │                                 # otp_code_input
+    ├── login/
+    │   └── ui/
+    │       ├── views/
+    │       │   ├── login_flow_screen.dart   # LIVE /login: A1→A4→A2/B2→B1, calls
+    │       │   │                            # AuthRepository + SessionController
+    │       │   ├── sign_in_screen.dart      # A1 (and B3 SessionExpiredScreen, preview only)
+    │       │   └── takeover_, device_locked_, crm_authorised_, verify_phone_,
+    │       │       pin_unlock_screen.dart   # static design-preview screens only
+    │       └── widgets/crown_wordmark.dart
+    └── session/                     # signed-in partner (live path)
+        ├── data/                    # session_repository, session_service
+        │                            # (/session/lookup or mock), signed_in_user
+        └── ui/session_controller.dart
 
 prototype_server/                     # separate Dart package — NOT part of
 ├── pubspec.yaml                      # the Flutter app; never imported by lib/
+├── README.md
 ├── bin/
 │   └── server.dart                   # entrypoint: dart run bin/server.dart
 ├── lib/
-│   ├── routes/                       # shelf_router handlers implementing
-│   │                                  # every operation in contracts/auth-service.md
+│   ├── router.dart                   # buildRouter(): mounts every route file
+│   ├── routes/                       # registration_, login_, login_otp_,
+│   │                                  # rebinding_authorization_, rebindings_,
+│   │                                  # device_status_routes.dart, json_helpers.dart
+│   ├── data/
+│   │   ├── auth_data_store.dart      # AuthDataStore interface + result enums
+│   │   ├── models.dart               # server-side models, DeviceMoveTier
+│   │   └── postgres_auth_data_store.dart  # SQL + transactions (imports `postgres`)
 │   ├── db/
 │   │   ├── schema.sql                # the tables + partial unique indexes
-│   │   │                              # from data-model.md
-│   │   └── postgres_client.dart      # the ONLY file that imports `postgres`
-│   └── otp/                          # simulated OTP generation (research.md)
+│   │   └── postgres_client.dart      # pool from PG_* env vars
+│   └── otp/otp_generator.dart        # simulated 6-digit code
 ├── seed/
-│   └── seed.sql                      # baseline accounts (quickstart.md)
+│   └── seed.sql                      # four `+92…` baseline accounts
 └── test/
-    └── routes/                       # dart test — handlers against a fake
-                                       # data layer, per research.md
+    ├── routes/                       # login_, login_otp_, rebindings_,
+    │                                  # rebinding_authorization_, registration_,
+    │                                  # device_status_test.dart
+    └── support/fake_auth_data_store.dart
 
 test/
 └── features/
-    └── auth/
-        ├── data/
-        │   └── repositories/
-        │       └── auth_repository_test.dart   # against fake AuthService
-        └── ui/
-            └── view_models/                     # ViewModel unit tests
+    ├── auth/
+    │   ├── data/repositories/auth_repository_test.dart
+    │   ├── support/                  # fake_auth_service, fake_stores
+    │   └── ui/
+    │       ├── view_models/          # login_, registration_view_model_test
+    │       └── views/login_screen_test.dart   # legacy LoginScreen only
+    └── session/session_controller_test.dart
 ```
 
-**Structure Decision**: The Flutter app follows the exact `data/{models,
+No test drives the live `LoginFlowScreen`.
+
+**Structure Decision**: The Flutter app follows the `data/{models,
 repositories,services}` + `ui/{views,view_models,widgets}` convention
-already established by `lib/features/bootstrap/` and documented in
-`docs/ARCHITECTURE.md`; nothing about that convention changes.
+documented in `docs/ARCHITECTURE.md`. The live board-02 screens were
+later added under `lib/features/login/` and the signed-in-partner session
+under `lib/features/session/`; both reuse `AuthRepository` rather than a
+second device-binding path. `lib/features/bootstrap/` has been removed.
 `prototype_server/` is a second, independent Dart package at the
 repository root, sibling to `lib/`, `android/`, `ios/`, and `test/` — it
 is not a Flutter module, is never built into the app, and exists solely
-to satisfy FR-035 (see Complexity Tracking).
+to satisfy FR-038 (see Complexity Tracking). Other features' routes and
+data stores have since been added to it as well.
 
 ## Prototype Seed Data & Test Fixtures
 
 See `quickstart.md` → "Seed data & test fixtures" for the concrete
 mechanism: a `prototype_server/seed/seed.sql` script inserts the four
-baseline accounts (one per user type, none with an Active device yet).
+baseline accounts (one per user type, `+92…` numbers, none with an Active
+device yet). The live sign-in screen can only submit ten digits, so live
+testing uses the six demo partners in `db/seed/001_reference_and_partners.sql`
+(ten-digit numbers, also no binding) — whose first sign-in is an OTP-only
+second-device-tier move (spec FR-049).
 Every other fixture state `spec.md`'s scenarios need — an account with an
 Active device, a Revoked device, a device Active for a *different*
 account (the conflict setup), and each `rebinding_authorizations` status
@@ -389,7 +436,9 @@ Account B → Device B Active, then an authorized rebinding of Account A
 onto Device B — is walked step-by-step in `quickstart.md` scenarios
 J–K, ending in the required end state (Device A Revoked for Account A,
 Device B Active for Account A, Device B Revoked for Account B) produced
-atomically by `prototype_server`'s `completeRebinding` handler.
+atomically by `prototype_server`'s `completeRebinding` handler. The same
+end state is asserted automatically, against the fake data store, in
+`prototype_server/test/routes/rebindings_test.dart`.
 
 ## Complexity Tracking
 
@@ -397,7 +446,7 @@ atomically by `prototype_server`'s `completeRebinding` handler.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
-| A second Dart package (`prototype_server/`), beyond the single-Flutter-project norm this codebase otherwise follows | FR-035 requires that the Flutter application never connect directly to PostgreSQL; achieving a real process/network boundary is the only way to make that literally true | *A `Service` class inside the Flutter app wrapping the `postgres` driver* — tried first, rejected on review: it is still "Flutter connects to PostgreSQL" no matter which class or layer wraps the driver, so it does not actually satisfy FR-035. *A full ASP.NET Core Web API now, matching production exactly* — considered in `research.md`, not the default because it requires a second SDK/runtime (.NET) the project has none of yet, purely to run a local prototype loop; flagged there as a valid override if the team prefers it. |
+| A second Dart package (`prototype_server/`), beyond the single-Flutter-project norm this codebase otherwise follows | FR-038 requires that the Flutter application never connect directly to PostgreSQL; achieving a real process/network boundary is the only way to make that literally true | *A `Service` class inside the Flutter app wrapping the `postgres` driver* — tried first, rejected on review: it is still "Flutter connects to PostgreSQL" no matter which class or layer wraps the driver, so it does not actually satisfy FR-038. *A full ASP.NET Core Web API now, matching production exactly* — considered in `research.md`, not the default because it requires a second SDK/runtime (.NET) the project has none of yet, purely to run a local prototype loop; flagged there as a valid override if the team prefers it. |
 
 No other entries — every other Constitution Check row above is a plain
 **Pass** with no violation to justify.

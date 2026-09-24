@@ -11,7 +11,7 @@ description: "Task list for Login, Authentication, and Device Binding"
 
 **Prerequisites**: `plan.md` (architecture), `spec.md` (9 user stories,
 priorities P1/P2/P3), `data-model.md` (6 entities), `contracts/auth-service.md`
-(8 `AuthService` operations), `research.md` (technology decisions),
+(9 `AuthService` operations), `research.md` (technology decisions),
 `quickstart.md` (acceptance scenarios A–R)
 
 **Tests**: Explicitly requested by the user for this task breakdown — every
@@ -19,6 +19,19 @@ user-story phase includes tests, on both the Flutter side (fake `AuthService`)
 and the `prototype_server` side (fake data layer), plus a final
 manual-validation phase running `quickstart.md` scenarios A–R against the
 real stack.
+
+**Reconciliation with the code (2026-09-24)**: every checkbox below was
+re-checked against the implementation; a box is `[x]` only where the code
+or test actually exists. Changes from the earlier state: T003, T026,
+T034, T035, T045, T052, T060, T064, T067, T068, T081, T085, T096, T108
+checked (built by the later board-02 pass in `lib/features/login/`);
+T075 and T080 unchecked (only partly built — see their notes). Phase 14
+records the as-built work no task described, plus the gaps found (103/127 tasks now `[x]`). Current
+automated results: `prototype_server` auth route tests 33/33 passing;
+Flutter `test/features/auth` + `test/features/session` 36/36 passing. FR
+numbers cited in Phases 1–12 predate the spec's renumbering (e.g. "FR-035"
+there is today's FR-038, "FR-040" is FR-043, "FR-044" is FR-047) and are
+left as written.
 
 **Implementation status (2026-09-17)**: 70/97 tasks completed — all code and
 both automated test suites (`prototype_server`: 22/22 passing; Flutter:
@@ -84,12 +97,12 @@ See Phase 13 (below Phase 12) for the concrete rework/addition tasks.
 **Phase 13 has since been implemented** (2026-09-17, later pass) — the
 superseded tasks listed above no longer describe current behavior; see
 Phase 13's own status note for exactly what changed and what remains
-deferred (T107, T108, T116).
+deferred (now only T107 — see the 2026-09-24 reconciliation note at the top).
 
 **Architecture enforced throughout**: `Flutter UI → ViewModel →
 AuthRepository → AuthService/HttpAuthService → HTTP → prototype_server →
 PostgreSQL`. Flutter never imports `postgres` and never holds PostgreSQL
-credentials; only `prototype_server/lib/db/postgres_client.dart` does.
+credentials; only `prototype_server` does (`lib/db/postgres_client.dart` and `lib/data/postgres_*_data_store.dart`). The live `/login` screen (`lib/features/login/`) calls `AuthRepository` directly, without a ViewModel.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -105,7 +118,7 @@ credentials; only `prototype_server/lib/db/postgres_client.dart` does.
   ui/{views,view_models,widgets}}`, extending the existing
   `lib/features/<feature>/` convention (`docs/ARCHITECTURE.md`)
 - `prototype_server/`: a separate Dart package at the repository root
-  (`prototype_server/{bin,lib/{routes,db,otp},seed,test}`) — never imported
+  (`prototype_server/{bin,lib/{router.dart,routes,data,db,otp},seed,test/{routes,support}}`) — never imported
   by `lib/`, never a Flutter dependency
 - Flutter tests: `test/features/auth/...` (mirrors `lib/features/auth/...`)
 - `prototype_server` tests: `prototype_server/test/...`
@@ -125,10 +138,11 @@ credentials; only `prototype_server/lib/db/postgres_client.dart` does.
 - [x] T002 [P] Add Flutter dependencies to `pubspec.yaml`: `http`,
       `flutter_secure_storage`, `uuid` (per `research.md` §Summary of new
       dependencies — `postgres` is never added here, FR-035)
-- [ ] T003 [P] Sync Claude Design tokens: run `/design-login`, pull the real
+- [x] T003 [P] Sync Claude Design tokens: run `/design-login`, pull the real
       `cse-design-system` tokens into `lib/core/theme/`, remove the
       `PROVISIONAL` headers per `docs/DESIGN_SYSTEM.md` (blocks every later
-      UI task — Constitution Principle II)
+      UI task — Constitution Principle II) *(done: `docs/DESIGN_SYSTEM.md`
+      records tokens synced 2026-09-17; brand font still outstanding)*
 - [x] T004 [P] Configure `prototype_server` formatting/lints: add
       `prototype_server/analysis_options.yaml` (plain-Dart lint set,
       consistent with the root project's `flutter_lints` intent)
@@ -167,10 +181,13 @@ starts before this phase is done.
       (FR-035); opens a connection/pool from `PG_HOST`/`PG_PORT`/
       `PG_DATABASE`/`PG_USER`/`PG_PASSWORD` environment variables (never
       hardcoded — constitution "secrets never invented or committed"); a
-      helper to apply `schema.sql` on startup in dev
+      helper to apply `schema.sql` on startup in dev *(not built — the
+      schema is applied manually with `psql`; `postgres` is also imported
+      by `prototype_server/lib/data/postgres_*_data_store.dart`)*
 - [x] T007 Implement the `prototype_server` HTTP skeleton:
       `prototype_server/bin/server.dart` (shelf pipeline + port binding) and
-      `prototype_server/lib/routes/` with one router registering all 8
+      `prototype_server/lib/routes/` (mounted by one router in
+      `prototype_server/lib/router.dart`) registering all 8
       operations from `contracts/auth-service.md` as stub `501 Not
       Implemented` handlers (`POST /registration/otp`, `POST
       /registration/otp/verify`, `POST /login`, `POST /login/otp`, `POST
@@ -189,7 +206,9 @@ starts before this phase is done.
       `{pending, authorized, not_authorized}`), `session.dart`
       (`accountId`, `deviceInstallationUuid`, `keepSignedIn`, `createdAt` —
       **no `expiresAt` field**, per the session-expiration Open Question) —
-      mirroring `data-model.md` field-for-field
+      mirroring `data-model.md` field-for-field *(partial: only
+      `account.dart` and `session.dart` exist; the other DTOs were not
+      needed because `auth_service.dart` defines result types directly)*
 - [x] T010 Define the `AuthService` abstract interface in
       `lib/features/auth/data/services/auth_service.dart` with exactly the
       8 operations and signatures implied by `contracts/auth-service.md`'s
@@ -198,7 +217,8 @@ starts before this phase is done.
       `checkRebindingAuthorization`, `completeRebinding`,
       `getDeviceBindingStatus`) — result types represent business outcomes
       as values, never exceptions, per contracts' "Error / outcome shape"
-      (FR-034, FR-037)
+      (FR-034, FR-037) *(now 9 operations — `confirmTakeover` added by
+      T105)*
 - [x] T011 [P] Implement
       `lib/features/auth/data/services/device_identity_store.dart`:
       generate a v4 UUID via the `uuid` package on first use, persist and
@@ -227,7 +247,9 @@ starts before this phase is done.
       `lib/features/bootstrap/` as the app's `initialLocation` and point it
       at a placeholder auth-feature entry route (concrete destination
       screen added in US1/US8); add `AuthRoutes` constants following the
-      existing `AppRoutes` pattern
+      existing `AppRoutes` pattern *(routes were added to `AppRoutes`
+      itself; `initialLocation` is now first launch `/`, which leads to
+      `/login`)*
 - [x] T016 [P] Add the shared auth ARB string keys used across every story
       (e.g. app-wide error copy) to `lib/core/localization/arb/app_en.arb`,
       `app_ur.arb`, `app_ur_Latn.arb`; per-story strings are added in their
@@ -267,6 +289,8 @@ types (`quickstart.md` scenarios A–D).
       (request OTP → verify → success/failure) against a hand-written fake
       `AuthService` in
       `test/features/auth/data/repositories/auth_repository_test.dart`
+      *(partial: only "requestRegistrationOtp passes the current device id
+      through" exists)*
 - [x] T019 [P] [US1] Flutter test: `RegistrationViewModel` state machine
       (idle → otpRequested → verifying → success/failure) in
       `test/features/auth/ui/view_models/registration_view_model_test.dart`
@@ -309,9 +333,11 @@ types (`quickstart.md` scenarios A–D).
       success, initial device binding confirmation); record which are full
       screens vs. dialog/bottom sheet/inline/snackbar — do **not** assume
       one file per state (`plan.md` §UI State Implementation)
-- [ ] T026 [US1] Flutter: implement the Registration view(s) in
+- [x] T026 [US1] Flutter: implement the Registration view(s) in
       `lib/features/auth/ui/views/` per T025's breakdown, using
       `lib/core/theme/` tokens exclusively, native Flutter widgets only
+      *(`registration_screen.dart`, routed at `/register/legacy`; built
+      without T025's inspection)*
 - [x] T027 [US1] Flutter: add registration-flow strings (labels, OTP
       prompts, error/success copy) to `app_en.arb`/`app_ur.arb`/
       `app_ur_Latn.arb`
@@ -363,12 +389,15 @@ supplies that.)
       `lib/features/auth/ui/view_models/login_view_model.dart` — mobile
       number entry + "Keep Me Signed In" choice only, no other field
       (FR-006)
-- [ ] T034 [US2] Flutter: Claude Design MCP inspection for Login states
+- [x] T034 [US2] Flutter: Claude Design MCP inspection for Login states
       (layout, branding/logo, mobile-number input + validation feedback,
       Keep Me Signed In control, primary action, loading, empty-field,
-      disabled/enabled, authentication failure)
-- [ ] T035 [US2] Flutter: implement the Login view(s) per T034's breakdown
-      in `lib/features/auth/ui/views/`
+      disabled/enabled, authentication failure) *(board 02 A1; no
+      client-side validation/empty-field state was built)*
+- [x] T035 [US2] Flutter: implement the Login view(s) per T034's breakdown
+      in `lib/features/login/ui/views/sign_in_screen.dart` (live, `/login`)
+      and `lib/features/auth/ui/views/login_screen.dart` (legacy,
+      `/login/legacy`)
 - [x] T036 [US2] Flutter: add login-flow ARB strings; register the Login
       view as the route `app_router.dart` falls back to when no session is
       restored (final wiring completed in US8)
@@ -430,11 +459,13 @@ OTP requirement (`quickstart.md` scenario F).
       `lib/features/auth/ui/view_models/new_device_otp_view_model.dart` if
       Claude Design treats it as a distinct flow) with OTP-entry and
       invalid-OTP states
-- [ ] T045 [US3] Flutter: Claude Design MCP inspection + implementation for
+- [x] T045 [US3] Flutter: Claude Design MCP inspection + implementation for
       the New/Untrusted-device OTP-entry state — confirm via MCP whether it
       reuses the OTP-entry component from US1 or is visually distinct;
-      implement accordingly in `lib/features/auth/ui/views/` and/or
-      `lib/features/auth/ui/widgets/`
+      implement accordingly *(live: A2 verify step in
+      `lib/features/login/ui/views/login_flow_screen.dart`, using the
+      registration feature's `EditableOtpField`; legacy:
+      `lib/features/auth/ui/widgets/otp_code_input.dart`)*
 - [x] T046 [US3] Flutter: add related ARB strings
 
 **Checkpoint**: `quickstart.md` scenario F passable.
@@ -486,8 +517,9 @@ keeps working and the new device gains nothing (`quickstart.md` scenario G).
       `AuthRepository.checkRebindingAuthorization` and the
       Pending/Not-Authorized ViewModel states (extending the new-device flow
       from US3)
-- [ ] T052 [US4] Flutter: Claude Design MCP inspection + implementation for
-      "rebinding pending" and "rebinding not authorized" states
+- [x] T052 [US4] Flutter: Claude Design MCP inspection + implementation for
+      "rebinding pending" and "rebinding not authorized" states *(both
+      render B1, the `LoginFlowScreen` locked step)*
 - [x] T053 [US4] Flutter: add related ARB strings
 
 **Checkpoint**: `quickstart.md` scenario G passable.
@@ -537,8 +569,10 @@ atomically (`quickstart.md` scenarios H–I).
       `auth_repository.dart`
 - [x] T059 [US5] Flutter: implement the success path (→ authenticated
       state) in the rebinding ViewModel from US4
-- [ ] T060 [US5] Flutter: Claude Design MCP inspection + implementation for
-      "rebinding authorized" / successful-rebinding state
+- [x] T060 [US5] Flutter: Claude Design MCP inspection + implementation for
+      "rebinding authorized" / successful-rebinding state *(B2 "CRM has
+      allowed one move" notice on the verify step; success goes straight to
+      Home)*
 - [x] T061 [US5] Flutter: add related ARB strings
 
 **Checkpoint**: `quickstart.md` scenarios H–I passable (non-conflict case).
@@ -573,10 +607,13 @@ confirm the three-row atomic outcome (`quickstart.md` scenarios J–K).
       behavior from T062 is identical across every pairing of the four
       user types (parametrized test: installer↔retailer,
       wholesaler↔distributor, etc.) — no special-cased branch for any pair
-      (FR-022)
-- [ ] T064 [P] [US6] Flutter test: the rebinding ViewModel handles a
+      (FR-022) *(covers 4 of the 6 pairings; the code has no user-type
+      branch at all)*
+- [x] T064 [P] [US6] Flutter test: the rebinding ViewModel handles a
       conflict outcome identically to the non-conflict authorized outcome
-      from US5 — no client-side conflict-specific branching
+      from US5 — no client-side conflict-specific branching *(conflict
+      group in `login_view_model_test.dart`: after confirmation the same
+      tier path runs)*
 
 ### Implementation for User Story 6
 
@@ -589,12 +626,14 @@ confirm the three-row atomic outcome (`quickstart.md` scenarios J–K).
       reproducing the exact `quickstart.md` J–K scenario and asserting the
       required final state: `Account A → Device A revoked`, `Account A →
       Device B active`, `Account B → Device B revoked`
-- [ ] T067 [US6] Flutter: Claude Design MCP inspection + implementation for
+- [x] T067 [US6] Flutter: Claude Design MCP inspection + implementation for
       a "device conflict" state, only if Claude Design represents it
       visually distinctly from the generic rebinding-authorized state from
-      US5 (confirm via MCP before adding anything new)
-- [ ] T068 [US6] Flutter: add related ARB strings (if T067 introduces new
-      copy)
+      US5 (confirm via MCP before adding anything new) *(A4 dialog: inline
+      in `LoginFlowScreen`, and `device_conflict_dialog.dart` for legacy)*
+- [x] T068 [US6] Flutter: add related ARB strings (if T067 introduces new
+      copy) *(`loginDeviceConflict*` keys; used by the legacy dialog only —
+      the live dialog hard-codes English)*
 
 **Checkpoint**: `quickstart.md` scenarios J–K passable.
 
@@ -661,12 +700,13 @@ device to test against) complete.
       `keepSignedIn = true`, calls `getDeviceBindingStatus` and restores
       authenticated state only on an `active` response, treating
       `revoked`/unknown as failure (FR-030)
-- [x] T075 [P] [US8] `prototype_server` test: `GET
+- [ ] T075 [P] [US8] `prototype_server` test: `GET
       /accounts/{accountId}/devices/{deviceId}/status`
       (`getDeviceBindingStatus`) returns `active`/`revoked`/unrecorded
       correctly, in
       `prototype_server/test/routes/device_status_test.dart` (FR-008,
-      FR-030)
+      FR-030) *(partial: only the unrecorded and `active` cases exist; no
+      `revoked` case)*
 
 ### Implementation for User Story 8
 
@@ -683,16 +723,21 @@ device to test against) complete.
       of `RegistrationViewModel` (US1), `LoginViewModel` (US2), and the
       rebinding ViewModel (US5/US6) — write the `Session` record via
       `SessionStore` only when Keep Me Signed In was selected (FR-027,
-      FR-028)
+      FR-028) *(done in `LoginViewModel` and the live `LoginFlowScreen`;
+      `RegistrationViewModel` does not persist a session)*
 - [ ] T079 [US8] Flutter: implement a startup/session-restoration step
       (e.g. `lib/features/auth/ui/view_models/session_restoration_view_model.dart`)
       invoked before routing to Login or authenticated home; Claude Design
       MCP inspection for "session restoration" (incl. loading state) and
-      "invalid/expired session" states
-- [x] T080 [US8] Flutter: wire session-restoration as the app's actual
+      "invalid/expired session" states *(not built: restoration happens in
+      the router redirect; B3 exists only as a design-preview screen)*
+- [ ] T080 [US8] Flutter: wire session-restoration as the app's actual
       startup redirect in `app_router.dart`, replacing the placeholder from
-      T015/T036
-- [ ] T081 [US8] Flutter: add related ARB strings
+      T015/T036 *(partial: `AuthRepository.restoreSession()` runs only in
+      the `/login/legacy` redirect; the live `/login` and signed-in routes
+      restore via `SessionController.restore()`, which does not check
+      device binding — see T121)*
+- [x] T081 [US8] Flutter: add related ARB strings *(`loginSessionExpiredNotice`)*
 
 **Checkpoint**: `quickstart.md` scenarios M, N, O passable.
 
@@ -723,9 +768,12 @@ in as trusted with no OTP (`quickstart.md` scenario P).
       (FR-032, FR-033)
 - [x] T084 [US9] Flutter: add a logout affordance in the authenticated UI
       (placement per Claude Design) that calls `logout()` and routes back
-      to sign-in
-- [ ] T085 [US9] Flutter: Claude Design MCP inspection + implementation for
-      the "logout" state/transition
+      to sign-in *(legacy `HomeScreen` calls `logout()`; the live Profile
+      tab's Sign out calls `SessionController.signOut()` instead, which
+      leaves the secure `Session` record in place — see T125)*
+- [x] T085 [US9] Flutter: Claude Design MCP inspection + implementation for
+      the "logout" state/transition *(Profile → Sign out confirmation, then
+      `/login`)*
 - [x] T086 [US9] Flutter: add related ARB strings
 
 **Checkpoint**: `quickstart.md` scenario P passable. All 9 user stories are
@@ -765,12 +813,17 @@ validation against the real stack.
       icons, borders, radius, elevation, loading/validation/error states,
       and transitions, per `spec.md` §Design Requirements' Visual
       Validation checklist
-- [ ] T096 [P] Traceability check: re-read `spec.md` FR-001 through FR-045
+- [x] T096 [P] Traceability check: re-read `spec.md` FR-001 through FR-045
       against the implementation and confirm each is satisfied by at least
-      one completed task above; note any gap
+      one completed task above; note any gap *(done 2026-09-24 against
+      FR-001–FR-052; gaps are marked "(Not implemented)" in `spec.md` and
+      listed as Phase 14's open tasks)*
 - [ ] T097 [P] Confirm `prototype_server/README.md` (T001) and
       `spec.md` §Prototype vs. Production Boundary still accurately
       describe the shipped architecture; update if implementation deviated
+      *(`spec.md` updated; the README still says to apply only
+      `schema.sql` + `seed/seed.sql` and omits `db/migrations/` — not
+      updated, outside this spec folder)*
 
 **Checkpoint**: Full feature validated end-to-end; both automated gates
 green; ready to consider `/speckit-implement` complete for this feature.
@@ -797,7 +850,7 @@ OTP-only success) are added, without renumbering the existing A–P
 letters. **T107 and T108 remain unimplemented by deliberate scope
 choice**: both are Claude-Design-dependent visual work, explicitly
 deferred per each pass's instructions ("Do NOT implement Claude Design
-visual changes yet" / "Do not modify the UI").
+visual changes yet" / "Do not modify the UI"). *(2026-09-24: the later board-02 pass built both the A4 dialog and its copy, so T108 is now done; T107 stays open only for naming both accounts.)*
 
 **Prerequisites**: Phases 3–9 (US1–US7) as already built; supersedes parts
 of their route/ViewModel logic per the superseded-task list above.
@@ -872,11 +925,16 @@ of their route/ViewModel logic per the superseded-task list above.
 - [ ] T107 Flutter: Claude Design MCP inspection + implementation for the
       A4 takeover/conflict-confirmation dialog (`plan.md` §UI State
       Implementation) — naming both accounts affected, shown from the new
-      step added in T105
-- [ ] T108 Flutter: add ARB strings for the conflict-confirmation dialog
+      step added in T105 *(partial: the dialog is built in both flows, but
+      names neither account — `evaluateLogin` returns only
+      `otherAccountId`; see T123)*
+- [x] T108 Flutter: add ARB strings for the conflict-confirmation dialog
       and any second-device-tier-specific copy (e.g. a variant of the A2
       OTP screen with no "CRM has allowed this" banner, contrasted with
-      B2's banner at the third-or-later tier)
+      B2's banner at the third-or-later tier) *(ARB keys
+      `loginDeviceConflict*`, `loginSecondDeviceMoveNotice`,
+      `loginCrmAuthorized*`; the live screens show the same variants in
+      hard-coded English — see T122)*
 
 ### Tests to rewrite (superseding the tasks listed in the note above)
 
@@ -931,7 +989,54 @@ superseded tests listed in the note above no longer exist in their old
 form. `quickstart.md` has since been rewritten (T116) to script F, R, G,
 H–I, Q, and J–K as live-stack manual scenarios matching this behavior
 exactly, including the conflict-decline and tier-composition cases; only
-T107/T108 (Claude-Design-dependent visual work) remain deferred.
+T107 (naming both accounts in A4) remains open.
+
+---
+
+## Phase 14: As-Built Reconciliation (2026-09-24)
+
+**Purpose**: Record implemented work that no earlier task described, and
+list the gaps between `spec.md` and the code found while reconciling. The
+`[x]` tasks below describe code that exists; the `[ ]` tasks are the gaps
+behind each "(Not implemented)" marker in `spec.md`.
+
+### Built without a task
+
+- [x] T118 Live board-02 login flow: `LoginFlowScreen` in
+      `lib/features/login/ui/views/login_flow_screen.dart` (A1 via
+      `sign_in_screen.dart`, A4 dialog, A2/A3 with 30-second resend
+      countdown, B2 notice, B1 locked step), routed at `/login`; calls
+      `AuthRepository` for every device decision (FR-011–FR-018, FR-050,
+      FR-052)
+- [x] T119 After the device policy passes, sign the partner in through
+      `SessionController.signIn` (`lib/features/session/`), which loads the
+      profile (`GET /session/lookup` or the mock directory) and saves it
+      when Keep Me Signed In is on; then `persistSessionIfRequested`
+      (FR-031, FR-032, FR-051)
+- [x] T120 Keep the spec-era screens reachable at `/login/legacy`,
+      `/register/legacy`, `/home/legacy` in `lib/app/router/app_router.dart`
+
+### Gaps (spec requirements not implemented)
+
+- [ ] T121 Validate device binding when restoring a session on the live
+      path: `SessionController.restore()` / the `/login` and signed-in
+      redirects in `app_router.dart` must check `getDeviceBindingStatus`
+      and discard the session unless it is `active` (FR-033, SC-007,
+      quickstart scenario O)
+- [ ] T122 Localize the live `LoginFlowScreen` and `SignInScreen` copy
+      through the ARB files (Constitution Principle VIII)
+- [ ] T123 Name both accounts in the A4 dialog: extend `POST /login`'s
+      `conflict` with display details and render the design's before/after
+      layout (FR-014; completes T107)
+- [ ] T124 Client-side mobile-number format validation before submitting
+      A1 (Edge Cases: "Invalid mobile number format")
+- [ ] T125 Clear the secure-storage `Session` record on the live sign-out,
+      or stop writing it on the live path (FR-035)
+- [ ] T126 Show the B3 "session ended" notice when a live session
+      restore fails (Design Requirements B3)
+- [ ] T127 Widget test driving the live `LoginFlowScreen` through trusted,
+      second-device, third-or-later, and conflict paths against the fake
+      `AuthService`
 
 ---
 
@@ -963,9 +1068,10 @@ T107/T108 (Claude-Design-dependent visual work) remain deferred.
 - **Polish (Phase 12)**: depends on all nine user stories being complete.
 - **Business-Rule Revision (Phase 13)**: depends on Phases 3–9 (US1–US7)
   as already built; its tasks supersede parts of US3–US6's route/ViewModel
-  logic in place, rather than adding a parallel implementation. Not yet
-  started — see the "Business-rule revision" note near the top of this
-  file.
+  logic in place, rather than adding a parallel implementation.
+  Implemented except T107 — see Phase 13's status note.
+- **As-built reconciliation (Phase 14)**: records work done after Phase
+  13; its open tasks depend on nothing else.
 
 ### Parallel Opportunities
 

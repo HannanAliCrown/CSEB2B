@@ -48,7 +48,7 @@ Only registered app partners are retained from device contacts; support numbers 
 - **FR-008**: Setting a new PIN MUST ask for it twice; setting a PIN enables it.
 - **FR-009**: Changing or disabling a PIN MUST require the current PIN; disabling keeps the stored PIN so re-enabling asks for the existing PIN, not a new one.
 - **FR-010**: The PIN MUST be stored only as a bcrypt hash (pgcrypto `crypt()`), one per account.
-- **FR-011**: The profile QR MUST encode only the mobile number and list its uses: chat for everyone; send cash and send points only when the owner is not an Installer.
+- **FR-011**: The profile QR MUST encode only the mobile number and list its uses: chat for everyone; send cash and send points only when the owner is not an Installer (installers cannot receive cash or hold points).
 - **FR-012**: Synced contacts MUST be stored only on the phone, de-duplicated by number, and removable with "Forget Synced Contacts".
 - **FR-013**: About MUST show server-supplied company copy and the version/build read from the installed app.
 - **FR-014**: Sign-out MUST re-lock the PIN gate and reset theme/language to phone defaults (Not implemented: `PinLock.relock()` and `AppSettingsController.reset()` are never called).

@@ -69,4 +69,4 @@ A partner reviews credits, debits, held entries, and historical balances.
 
 ## Assumptions
 - Equipment/product settlement is out of scope; this feature handles money only.
-- Cash moves up the chain: any role may send, only retailer, wholesaler, and distributor may receive.
+- Cash moves up the chain: any role may send, only retailer, wholesaler, and distributor may receive. Confirmed by the product owner on 2026-09-24.

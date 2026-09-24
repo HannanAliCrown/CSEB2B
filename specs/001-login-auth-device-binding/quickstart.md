@@ -32,8 +32,12 @@ must occur before any OTP is requested.
    ```
 
 2. **A local PostgreSQL instance**, already installed per the project
-   description. Create a database and apply the schema from
-   `data-model.md` (table definitions + the two partial unique indexes).
+   description. Create a database and apply
+   `prototype_server/lib/db/schema.sql` (table definitions + the two
+   partial unique indexes). The server does not apply it for you. To run
+   the whole app (the live `/login` flow loads the partner profile via
+   `/session/lookup`), also apply `db/migrations/*.sql` and `db/seed/*.sql`
+   in order, per `db/README.md`.
 
 3. **Seed the baseline accounts** (see "Seed data & test fixtures" below)
    before starting `prototype_server`.
@@ -63,32 +67,39 @@ must occur before any OTP is requested.
    ```powershell
    flutter pub get
    flutter gen-l10n
-   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
+   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080 --dart-define=DATA_SOURCE=server
    ```
 
-   `10.0.2.2` is how an Android emulator reaches the host machine; use
+   `10.0.2.2` is how an Android emulator reaches the host machine (and is
+   the default when `API_BASE_URL` is omitted); use
    `http://localhost:8080` on iOS Simulator, or the host's LAN IP on a
-   physical device (`research.md`).
+   physical device (`research.md`). The device-binding calls always go to
+   `prototype_server`; `DATA_SOURCE=server` additionally makes the
+   post-login profile lookup read the database instead of the bundled
+   mock directory.
 
-6. **Claude Design tokens synced** before judging any screen visually
-   (`docs/DESIGN_SYSTEM.md`): run `/design-login` once, then pull the real
-   `cse-design-system` tokens into `lib/core/theme/`. This guide validates
-   *behavior*; visual conformance to Claude Design is validated separately
-   per the spec's Design Requirements.
+6. **Which screen to use**: the live flow is `/login` (reached after first
+   launch). Registration scenarios A–D and the session-validation
+   scenario O only work on the legacy routes `/register/legacy` and
+   `/login/legacy` (see `plan.md` → "Reconciliation").
+
+7. **Claude Design tokens** are already synced (`docs/DESIGN_SYSTEM.md`).
+   This guide validates *behavior*; visual conformance to Claude Design is
+   validated separately per the spec's Design Requirements.
 
 ## Seed data & test fixtures
 
 Account provisioning is out of this feature's scope (spec Assumptions), so
 the baseline accounts this guide needs are inserted directly, not through
-the app. `prototype_server/seed/seed.sql` (created in `/speckit-tasks`)
-inserts one `accounts` row per user type with distinct mobile numbers:
+the app. `prototype_server/seed/seed.sql` inserts one `accounts` row per
+user type with distinct mobile numbers:
 
 ```sql
 INSERT INTO accounts (mobile_number, user_type) VALUES
-  ('+92300...001', 'installer'),
-  ('+92300...002', 'retailer'),
-  ('+92300...003', 'wholesaler'),
-  ('+92300...004', 'distributor');
+  ('+923000000001', 'installer'),
+  ('+923000000002', 'retailer'),
+  ('+923000000003', 'wholesaler'),
+  ('+923000000004', 'distributor');
 ```
 
 Apply it once against the local database:
@@ -96,6 +107,17 @@ Apply it once against the local database:
 ```bash
 psql -h localhost -U <local-dev-user> -d cse_b2b_prototype -f prototype_server/seed/seed.sql
 ```
+
+These `+92…` numbers can be typed into the legacy screens only. The live
+`/login` field accepts ten digits after a fixed `+92`, so on the live flow
+use the demo partners from `db/seed/001_reference_and_partners.sql`
+(e.g. `3004821190` Installer, `3007781204` Retailer, `3014429911`
+Wholesaler, `3028890143` Distributor). Neither seed creates a binding: the
+first sign-in on any device is New/Untrusted at the second-device tier and,
+once its OTP is verified, becomes that account's one OTP-only move
+(`context = 'rebinding'`, spec FR-049). To start from a Device 1
+(`initial_registration`) binding instead, register the account first via
+`/register/legacy` (scenarios A–D).
 
 Every other fixture state this guide's scenarios need —
 **no Active device**, **Active device**, **Revoked device**, **a device
@@ -129,7 +151,8 @@ app and what to check in the database*, not UI pixel detail.
 For each user type (Installer, Retailer, Wholesaler, Distributor):
 
 1. Launch the app on a fresh install (or clear local secure storage) so no
-   device UUID / session exists yet.
+   device UUID / session exists yet, and open `/register/legacy` (the live
+   `/register` wizard does not create a device binding).
 2. Enter that user type's seeded registered mobile number.
 3. Confirm the app requests a registration OTP and does **not** yet show
    authenticated content.
@@ -193,8 +216,9 @@ Repeat for all four types to cover Acceptance Scenarios A, B, C, D.
 3. In `rebinding_authorizations`, leave the resulting row's `status` as
    `pending`, or set it to `not_authorized` directly in the database
    (simulating the external/CRM decision).
-4. **Expect**: the app shows the refused/pending state and **never
-   requests an OTP** for this attempt (`POST /login/otp` would itself
+4. **Expect**: the app shows the B1 "Your account is fixed to another
+   phone" screen (the same screen for `pending` and `not_authorized`) and
+   **never requests an OTP** for this attempt (`POST /login/otp` would itself
    return `403 not_authorized` if called directly — confirm via the
    route, not just the UI); in `account_device_bindings`, Device 2's row
    (the account's current Active device) is still `status = 'active'`
@@ -204,9 +228,10 @@ Repeat for all four types to cover Acceptance Scenarios A, B, C, D.
 
 1. Continuing from scenario G, set the `rebinding_authorizations` row's
    `status` to `authorized` (simulating the external/CRM approval).
-2. Trigger the app to re-check authorization (the same retry action shown
-   on the refused state).
-3. **Expect**: only now does the app request a login-context OTP. Submit
+2. Tap "Try Again" on the B1 screen (it re-runs the whole login
+   evaluation, then re-checks authorization).
+3. **Expect**: only now does the app request a login-context OTP, and the
+   code screen shows the "CRM has allowed one move" notice (B2). Submit
    the correct code.
 4. **Expect**: the third device reaches authenticated content; in
    `account_device_bindings`, the third device's row is now
@@ -227,7 +252,8 @@ Repeat for all four types to cover Acceptance Scenarios A, B, C, D.
 3. **Expect**: `POST /login`'s response carries a non-null `conflict`
    naming the Retailer's account, **before** `tier` is acted on and
    before any OTP is requested. The app shows the takeover-confirmation
-   step (Claude Design A4) naming both accounts — confirm no
+   step (Claude Design A4) — "This phone is signed in to another account";
+   it does not name either account (Not implemented) — confirm no
    `otp_challenges` row exists yet for this device.
 4. **Decline** the confirmation. **Expect**: nothing changes at all —
    `POST /login/confirm-takeover` is never called, no OTP is requested,
@@ -300,11 +326,15 @@ Repeat for all four types to cover Acceptance Scenarios A, B, C, D.
    authenticated content — the app checks `getDeviceBindingStatus`
    (`contracts/auth-service.md`) and finds Device A `revoked`, so it
    returns to sign-in. Which tier caused the revocation is irrelevant to
-   this check.
+   this check. **This passes only on `/login/legacy`** (sign in there in
+   step 1). On the live `/login` path the saved partner record is restored
+   without any server check, so Device A reaches Home — spec FR-033 is Not
+   implemented there, and this scenario is expected to fail.
 
 ### P. Logout does not unbind the device
 
-1. On an account's Active device, sign in, then explicitly sign out.
+1. On an account's Active device, sign in, then explicitly sign out
+   (live: Profile → Sign out, then confirm).
 2. **Expect**: the app returns to sign-in; `account_device_bindings` is
    **unchanged** — the same row remains `status = 'active'`, and the
    account's device-move count is unaffected (logout never writes to

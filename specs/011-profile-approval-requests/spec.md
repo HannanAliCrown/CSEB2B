@@ -47,6 +47,7 @@ The buying source records an approval with expected purchasing or rejects with a
 - **FR-007**: Only the first buying source's decision is required and accepted. Once they approve, the buying source approval MUST show as approved on the applicant's Approval Status.
 - **FR-008**: A buying-source rejection MUST end the application (status `rejected`). An approval MUST change only the buying-source approval; Marketing Officer and CRM remain outstanding.
 - **FR-009**: Each outstanding approval on the applicant's Approval Status MUST offer a Call action that opens the phone dialer. The dialer currently receives placeholder `0000000000`; using a stored number per approver is (Not implemented).
+- **FR-010**: On the registration Buying Source step, a source number MUST be looked up automatically once it is fully entered, with no search action: 11 digits starting with 0, 12 starting with 92, 13 starting with +92, or 10 without a prefix (0, 92, and +92 are equivalent). A partial number MUST NOT be looked up. A match shows the source's details; otherwise the existing not-found or ineligible message is shown.
 
 ## Key Entities
 - **ProfileRequest**, **ProfileRequestMedia**, **ExpectedPurchaseBand**, **ProfileDecision**.

@@ -52,7 +52,7 @@ requirements actually require.
 **Revised** (see plan.md "What changed" for why this superseded the
 original decision below): a Postgres driver running *inside the Flutter
 process* is still Flutter connecting directly to PostgreSQL, no matter
-which class wraps it or what that class is named. FR-035 is a boundary
+which class wraps it or what that class is named. FR-038 is a boundary
 about the **process**, not just the code layer. Satisfying it requires an
 actual network hop between the Flutter app and PostgreSQL.
 
@@ -71,7 +71,7 @@ on) has exactly **one** implementation for this feature's entire life:
 `HttpAuthService`, using the `http` package to call
 `prototype_server`'s REST endpoints. Moving to production later means
 pointing the same `HttpAuthService` at the real ASP.NET Core API's base
-URL — a configuration change, not a code change, which satisfies FR-037
+URL — a configuration change, not a code change, which satisfies FR-040
 more strongly than an in-process swap would have.
 
 ```text
@@ -136,14 +136,21 @@ the generated device identifier, and (b) the "Keep Me Signed In" session
 record (account reference, device reference, issued-at, and whether the
 session was established with Keep Me Signed In on).
 
-**Rationale**: FR-044 requires that sensitive authentication/session
+**Rationale**: FR-047 requires that sensitive authentication/session
 information not be stored insecurely, and that production-equivalent
 tokens use secure storage; applying the same standard now costs nothing
-extra and avoids a later migration. It also satisfies FR-036 precisely:
+extra and avoids a later migration. It also satisfies FR-039 precisely:
 per spec, "session-specific local information may use appropriate Flutter
 local storage" — this *is* that appropriate local storage — while the
 authoritative Account/Device/AccountDeviceBinding/OTP/RebindingAuthorization
 state stays exclusively in PostgreSQL, reached only by `prototype_server`.
+
+**As built (2026-09-24)**: the device identifier and the `Session` record
+do use `flutter_secure_storage`. The live login path, however, also saves
+the signed-in partner's profile through the app's `shared_preferences`-
+backed `AppPreferences` (`lib/features/session/data/session_repository.dart`),
+and that record — not the secure `Session` — is what the live restore
+reads (see `data-model.md` → Local-only entities).
 
 **Alternatives considered**:
 - *`shared_preferences`* — rejected: plaintext storage, and the spec's
@@ -240,8 +247,8 @@ way to obtain the code); this is the minimal way to do that.
 
 | Package | Purpose | Justification |
 |---|---|---|
-| `http` | Calls `prototype_server` (and, later, the production API) through the one `HttpAuthService` implementation of `AuthService` | FR-034/FR-035/FR-037 — this is the feature that first has an API contract, the condition `docs/ARCHITECTURE.md` names for adding an HTTP client |
-| `flutter_secure_storage` | Local device-id + session persistence | FR-044 (secure storage for sensitive local data), FR-036 (session-specific local storage) |
+| `http` | Calls `prototype_server` (and, later, the production API) through the one `HttpAuthService` implementation of `AuthService` | FR-037/FR-038/FR-040 — this is the feature that first has an API contract, the condition `docs/ARCHITECTURE.md` names for adding an HTTP client |
+| `flutter_secure_storage` | Local device-id + session persistence | FR-047 (secure storage for sensitive local data), FR-039 (session-specific local storage) |
 | `uuid` | Local device-identifier generation | Assumptions: device-identification mechanism is a planning decision; smallest option that satisfies every FR/edge case |
 
 **`prototype_server`** (separate package, its own `pubspec.yaml` — never
@@ -249,8 +256,8 @@ added to the Flutter app's dependencies):
 
 | Package | Purpose | Justification |
 |---|---|---|
-| `postgres` | PostgreSQL driver | FR-036 requires PostgreSQL as the prototype's authoritative store |
-| `shelf`, `shelf_router` | Minimal HTTP server + routing | Smallest way to expose `contracts/auth-service.md`'s REST shape locally, per the corrected FR-035 boundary |
+| `postgres` | PostgreSQL driver | FR-039 requires PostgreSQL as the prototype's authoritative store |
+| `shelf`, `shelf_router` | Minimal HTTP server + routing | Smallest way to expose `contracts/auth-service.md`'s REST shape locally, per the corrected FR-038 boundary |
 
 No state-management, routing, DI, or design-system package is added or
 changed in the Flutter app; `dio`/retrofit/mocking frameworks remain

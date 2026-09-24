@@ -213,6 +213,11 @@ class _ProfileRequestDetailScreenState
                 label: band.label,
                 onTap: () => Navigator.of(context).pop(band),
               ),
+            // Clears the phone's navigation bar so the last band is not cut
+            // off beneath it.
+            SizedBox(
+              height: MediaQuery.viewPaddingOf(context).bottom + AppSpacing.sm,
+            ),
           ],
         ),
       ),
