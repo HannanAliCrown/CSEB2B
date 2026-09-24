@@ -404,10 +404,10 @@ class PostgresPartnerDataStore implements PartnerDataStore {
           },
         );
 
-        // Being named as somebody's buying source is something to be told
-        // about, not something to discover by opening New Profile. The
-        // SELECT is the guard: an unmatched number is nobody's account, so
-        // it notifies nobody.
+        // Only the first buying source is asked to verify, so only they are
+        // told. The SELECT is the guard: an unmatched number is nobody's
+        // account, so it notifies nobody.
+        if (source.position != 0) continue;
         await session.execute(
           Sql.named('''
             INSERT INTO notifications (
@@ -510,7 +510,8 @@ class PostgresPartnerDataStore implements PartnerDataStore {
     final account = await findAccountByMobileNumber(mobileNumber);
     if (account == null) return null;
 
-    // Named as the buying source AND still outstanding. A request already
+    // Named as the first buying source AND still outstanding. Sources named
+    // after the first are not asked to verify. A request already
     // decided is gone from this list — it is not a history screen.
     //
     // `cnic_number` is not selected. The buying source is confirming that
@@ -527,6 +528,7 @@ class PostgresPartnerDataStore implements PartnerDataStore {
           FROM registration_applications r
           JOIN registration_buying_sources s
             ON s.application_id = r.id
+           AND s.position = 0
            AND s.matched_account_id = @accountId::uuid
           JOIN registration_approvals v
             ON v.application_id = r.id
@@ -556,8 +558,8 @@ class PostgresPartnerDataStore implements PartnerDataStore {
     return requests..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
   }
 
-  /// Who else the applicant named, so the buying source can see they are not
-  /// the only one being asked.
+  /// Who else the applicant named, so the buying source can see where else
+  /// they buy from.
   Future<List<String>> _otherBuyingSources({
     required String applicationId,
     required String exceptAccountId,
@@ -624,8 +626,8 @@ class PostgresPartnerDataStore implements PartnerDataStore {
     if (account == null) return ProfileRequestRefusal.unknownAccount;
 
     // The WHERE clause is the authorisation: it updates nothing unless this
-    // partner really was named as the applicant's buying source and the
-    // approval is still outstanding. Deciding twice, or deciding someone
+    // partner really was named as the applicant's first buying source and
+    // the approval is still outstanding. Deciding twice, or deciding someone
     // else's request, changes no rows.
     final updated = await _client.pool.execute(
       Sql.named('''
@@ -642,6 +644,7 @@ class PostgresPartnerDataStore implements PartnerDataStore {
            AND EXISTS (
              SELECT 1 FROM registration_buying_sources s
               WHERE s.application_id = v.application_id
+                AND s.position = 0
                 AND s.matched_account_id = @accountId::uuid
            )
         RETURNING v.id

@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-17
 
-**Status**: Draft (Revised — tiered device-move model)
+**Status**: Draft (Revised — tiered device-move model; reconciled with the implemented code 2026-09-24 — requirements with no implementation are marked "(Not implemented)")
 
 **Input**: User description: "Crown Solar Energy — Login, Authentication and Device Binding" (full detailed requirements provided by user; revised per corrected business rules for registration, login, device states, and rebinding; further revised to the final tiered device-move model confirmed against the Claude Design Login journey and its functional spec)
 
@@ -144,6 +144,14 @@ At no point does entering the mobile number alone bypass whichever gate
 the applicable tier requires. No password, username, email, dealer code,
 or other additional authentication factor is introduced at either stage.
 
+**Account with no Active device at login** (as implemented): an account
+that has never had a Device 1 binding — e.g. the seeded demo accounts, or
+an account opened by the separate registration wizard, neither of which
+creates an `initial_registration` binding — is treated like any other
+New/Untrusted login at the second-device tier. Its first OTP-verified
+sign-in is recorded as a `rebinding`-context binding, so it counts as the
+account's one OTP-only move (see FR-049).
+
 ## Device-Move Tiers
 
 This is the final, authoritative device-move model for this feature —
@@ -197,12 +205,20 @@ and before evaluating the requesting account's device-move tier.
   directly to the requesting account's tier-gated flow.
 - If there **is** a conflict, the system MUST present an explicit
   confirmation step to the user — mirroring the Claude Design's takeover
-  dialog (Claude Design screen A4) — naming both accounts affected and
-  stating that continuing will remove the other account's binding to this
-  device. Only after the user explicitly confirms does the flow proceed to
+  dialog (Claude Design screen A4) — stating that this phone is signed in
+  to another account and that continuing will sign that account out of
+  this phone. *(Naming both accounts affected — the design's before/after
+  layout — is **Not implemented**: the server reports only the other
+  account's opaque id, and the dialog shows generic copy.)* Only after the
+  user explicitly confirms does the flow proceed to
   the requesting account's tier-gated flow (second-device tier or
   third-or-later-device tier, exactly as above). Declining leaves every
   account's binding state completely unchanged.
+
+As implemented, the server *detects* the conflict, but the confirmation
+itself is enforced by the Flutter client only: `POST /login/confirm-takeover`
+records nothing, and the rebinding operation does not require it to have
+been called (see Open Questions).
 
 A device conflict can occur at either device-move tier — the confirmation
 step is about the *device's* current ownership, not about which tier
@@ -215,8 +231,12 @@ gates the *requesting account's* own move.
 **Out of scope for this feature's implementation** — registration is a
 separate journey (see "Out of Scope"). This story is retained here only so
 later stories can refer to "an account that already has Device 1 Active"
-as their starting precondition; no registration UI, ViewModel, or backend
-route is built or modified by this feature.
+as their starting precondition. *(As built: a minimal registration path
+from an earlier revision still exists — `POST /registration/otp` and
+`POST /registration/otp/verify`, `RegistrationViewModel`, and
+`RegistrationScreen` at the `/register/legacy` route. The app's live
+`/register` route is the separate registration wizard, which does not
+create a device binding.)*
 
 **Acceptance Scenarios**:
 
@@ -287,9 +307,11 @@ number alone.
    the strength of the mobile number alone. *(Acceptance Scenario F)*
 2. **Given** Device B is currently Active for a *different* account,
    **When** the requesting account's mobile number is submitted from
-   Device B, **Then** a confirmation step naming both accounts is shown
-   *before* any OTP is requested, and no binding changes until the user
-   explicitly confirms. *(Acceptance Scenario Q)*
+   Device B, **Then** a confirmation step stating that the phone is
+   signed in to another account is shown *before* any OTP is requested,
+   and no binding changes until the user explicitly confirms. *(Acceptance
+   Scenario Q. Naming both accounts in that step is Not implemented — see
+   "Device Conflict Confirmation".)*
 3. **Given** that confirmation step, **When** the user declines/cancels,
    **Then** no account's binding state changes at all, and Device B
    remains exactly as it was.
@@ -363,7 +385,9 @@ atomically.
 2. **Given** that outcome is **Pending** or **Not Authorized**, **When**
    the check occurs, **Then** no OTP is requested, the device remains
    New/Untrusted, and the account's existing Active device is completely
-   unaffected. *(Acceptance Scenario G)*
+   unaffected. Both outcomes show the same "account is fixed to another
+   phone" refusal screen (Claude Design B1), whose "Try Again" action
+   re-runs the whole login evaluation. *(Acceptance Scenario G)*
 3. **Given** that outcome is **Authorized**, **When** the check occurs,
    **Then** the system requests a login-context OTP; **When** that OTP is
    successfully verified, **Then** the new device becomes Active and the
@@ -485,7 +509,10 @@ authenticated content.
    a move at either tier), **When** the app on the revoked device attempts
    to restore that session, **Then** access is denied and the
    device-binding state (Revoked) governs the outcome, not the stale
-   session. *(Acceptance Scenario O)*
+   session. *(Acceptance Scenario O. **Not implemented on the live
+   `/login` → `/home` path**, which restores the saved partner record
+   without asking the server; implemented only on the `/login/legacy`
+   route via `AuthRepository.restoreSession` — see FR-033.)*
 
 ---
 
@@ -518,10 +545,18 @@ in again as a trusted device without any OTP step.
 
 ### Edge Cases
 
-- **Invalid mobile number format**: submission is rejected before any
-  login attempt proceeds; no device state changes.
+- **Invalid mobile number format**: *(Not implemented as a separate
+  check.)* The sign-in field accepts digits only, up to 10, with a fixed
+  `+92` prefix, but nothing validates the number before submission; an
+  empty, short, or otherwise malformed number is sent to the server and
+  fails as "no account uses this number." No device-binding state
+  changes.
 - **Mobile number not associated with any account, submitted at login**:
-  authentication fails and no device-binding state is changed.
+  authentication fails ("No Crown Solar account uses this number.
+  Register instead.") and no device-binding state is changed.
+- **Account with no Active device at all** (never registered through
+  Device 1): treated as New/Untrusted at the second-device tier; its first
+  OTP-verified sign-in becomes its one OTP-only move (FR-049).
 - **Account with an Active device, same device signs in**: handled by User
   Story 2 (trusted-device login).
 - **Account with an Active device, a different device signs in, no
@@ -537,7 +572,19 @@ in again as a trusted device without any OTP step.
 - **OTP lifecycle behavior when verification is attempted after the OTP's
   validity period has elapsed** (either tier) is an Open Question; see
   [Open Questions](#open-questions--business-rules-required). No expiry
-  duration or expiration policy is defined by this specification.
+  duration or expiration policy is defined by this specification, and
+  none is enforced.
+- **Resend**: requesting the code again issues a new challenge; only the
+  most recent unverified challenge is checked, so an earlier code stops
+  working (FR-050). The live A2 screen allows resend only after a
+  30-second client-side countdown; the server enforces no cooldown.
+- **No open challenge to verify** (e.g. it was already verified): the
+  server returns "challenge not found"; the live screen words this as
+  "That code has expired. Ask for a new one." although no expiry exists.
+- **Device move committed, but the partner's profile then fails to load**:
+  the binding change already stands; the sign-in screen shows "Signed in
+  on this phone, but your profile could not be loaded," and signing in
+  again succeeds as a trusted device.
 - **Rebinding authorization state is Pending, at the third-or-later
   tier** (a decision has not yet been made by the external/CRM system): no
   OTP is requested; the requesting device remains New/Untrusted and the
@@ -557,10 +604,17 @@ in again as a trusted device without any OTP step.
   tier, not the tier that applied when that device was originally bound.
 - **A persisted "Keep Me Signed In" session exists on a device that has
   since been Revoked**: handled by User Story 8; the session must not grant
-  access, regardless of which tier caused the revocation.
+  access, regardless of which tier caused the revocation. *(Not
+  implemented on the live `/login` path — see FR-033.)*
 - **Session restoration fails** (session is invalid, expired, or its
   device is no longer Active): the partner is returned to the sign-in
-  screen.
+  screen. As built, an unreadable saved record is discarded and the
+  partner sees sign-in; the Claude Design B3 "session ended" notice exists
+  only in the design preview and is not shown by the live flow.
+- **An Authorized decision, or a verified login OTP, left over from an
+  earlier attempt for the same account/device pair**: neither is consumed
+  by a completed move, so both still count on a later attempt for that
+  same pair (see Open Questions).
 - **Sign-out**: handled by User Story 9; never changes device-binding
   state or the account's device-move count.
 - **Persistence/transaction failure during a move at either tier**: the
@@ -576,7 +630,7 @@ in again as a trusted device without any OTP step.
 
 ### Functional Requirements
 
-**Registration** *(out of scope for this feature's implementation — retained for traceability only; see "Out of Scope")*
+**Registration** *(out of scope for this feature's implementation — retained for traceability only; see "Out of Scope". FR-001–FR-003 and FR-043 are implemented only by the legacy `/register/legacy` path and its two `/registration/otp` routes.)*
 
 - **FR-001**: The system MUST provide a registration flow, used when an
   account has no Active device, consisting of: registered mobile-number
@@ -602,7 +656,9 @@ in again as a trusted device without any OTP step.
 - **FR-006**: The sign-in form MUST collect only two things: the partner's
   registered mobile number, and a "Keep Me Signed In" choice. No password,
   email, username, dealer code, or other credential field is presented or
-  required.
+  required. As built, the live sign-in screen (A1) takes the ten national
+  digits after a fixed `+92` prefix, has "Keep Me Signed In" checked by
+  default, and offers a "Register" link to the registration wizard.
 - **FR-007**: The registered mobile number MUST be the sole account
   identifier used to initiate login for all four user types.
 
@@ -637,18 +693,24 @@ in again as a trusted device without any OTP step.
   before requesting any OTP, whether that device is currently Active for a
   *different* account (a device conflict).
 - **FR-014**: Where a device conflict exists, the system MUST require an
-  explicit user confirmation of the takeover — naming both accounts
-  affected — before any OTP is requested for that device; declining MUST
-  leave every account's binding state unchanged. This confirmation is
-  independent of, and always precedes, the device-move tier determination
-  in FR-015.
+  explicit user confirmation of the takeover before any OTP is requested
+  for that device; declining MUST leave every account's binding state
+  unchanged. This confirmation is independent of, and always precedes,
+  acting on the device-move tier in FR-015. *(Naming both accounts
+  affected is **Not implemented** — the conflict outcome carries only the
+  other account's id. The confirmation is enforced by the client only; the
+  server's confirm step writes nothing and the rebinding operation does
+  not check for it.)*
 - **FR-015**: For a New/Untrusted device with no conflict, or immediately
   after a conflict has been confirmed per FR-014, the system MUST
   determine the requesting account's device-move tier: **second-device
   tier** if the account's device-move count (per "Device-Move Tiers") is
   zero, or **third-or-later-device tier** if it is one or more. This
   determination MUST be made server-side and MUST NOT be computed or
-  trusted client-side (see FR-046).
+  trusted client-side (see FR-046). As built, the server returns the
+  conflict and the tier together in one login response; the client acts
+  on the conflict first. The server re-derives the tier itself when an OTP
+  is requested and when the move is completed.
 - **FR-016**: At the **second-device tier**, the system MUST require only
   a successfully verified login-context OTP (simulated in this prototype,
   distinct from any registration OTP) before the device may become
@@ -659,7 +721,10 @@ in again as a trusted device without any OTP step.
   requesting any login-context OTP for that device. Where the outcome is
   **Pending** or **Not Authorized**, the system MUST NOT request an OTP,
   MUST leave the device New/Untrusted, and MUST leave the account's
-  existing Active device unaffected.
+  existing Active device unaffected. The server enforces this itself: an
+  OTP request at this tier is refused as not authorized (creating a
+  Pending record if none exists) unless the latest record for the pair is
+  Authorized.
 - **FR-018**: At the **third-or-later-device tier**, once the
   rebinding-authorization outcome is Authorized per FR-017, the system
   MUST then require a successfully verified login-context OTP — identical
@@ -674,13 +739,15 @@ in again as a trusted device without any OTP step.
   verifying a submitted OTP — for both the registration context and the
   login (New/Untrusted-device) context, at either device-move tier —
   simulating the challenge instead of sending a real SMS.
-- **FR-021**: The system MUST distinguish and persist the outcomes of OTP
-  verification (successful or failed) and the context it belongs to
-  (registration or login), and MUST NOT enforce any specific OTP expiry
-  duration, attempt limit, or cooldown period that is not explicitly
-  defined by the business; see
+- **FR-021**: The system MUST persist each OTP challenge with its context
+  (registration or login) and whether it has been successfully verified;
+  a failed attempt is represented only by the challenge staying
+  unverified — no separate failed-attempt record is kept. The server MUST
+  NOT enforce any specific OTP expiry duration, attempt limit, or cooldown
+  period that is not explicitly defined by the business; see
   [Open Questions](#open-questions--business-rules-required) for the
-  OTP-expiry gap.
+  OTP-expiry gap. *(The live A2 screen does apply a 30-second client-side
+  resend countdown — see Open Questions.)*
 
 **Device Rebinding & Conflicts**
 
@@ -688,7 +755,9 @@ in again as a trusted device without any OTP step.
   from device-binding state, with at least three possible values:
   **Pending**, **Authorized**, **Not Authorized**. Per FR-016, it MUST
   never be consulted at the second-device tier, regardless of whether a
-  stray record happens to exist for that account/device pair.
+  stray record happens to exist for that account/device pair. As built, a
+  record is created as Pending the first time the pair is checked, and the
+  most recent record for the pair is the one that applies.
 - **FR-023**: Once all gates required by the applicable tier are satisfied
   (FR-016 alone, or FR-017 followed by FR-018), the system MUST, as a
   single atomic operation: activate the new device for the requesting
@@ -732,15 +801,22 @@ in again as a trusted device without any OTP step.
   influence it in return.
 - **FR-031**: When "Keep Me Signed In" is enabled, the system MUST persist
   session state and restore it after an app restart while the session
-  remains valid.
+  remains valid. As built, two records are written: the signed-in
+  partner's profile (live path, via the app's preferences store), and a
+  `Session` record of account id + device identifier (secure storage).
 - **FR-032**: When "Keep Me Signed In" is disabled, the system MUST NOT
   automatically restore the session after an app restart; the partner must
-  sign in again.
+  sign in again. (Signing in with it disabled also clears any previously
+  saved partner record.)
 - **FR-033**: When restoring a persisted session, the system MUST validate
   the current device's binding state; a persisted session on a device that
   is no longer that account's Active device (e.g., because it was Revoked
   by a move at either tier) MUST NOT be allowed to reach authenticated
-  content.
+  content. *(**Not implemented on the live `/login` → `/home` path**: it
+  restores the saved partner record without contacting the server.
+  Implemented only on the `/login/legacy` route, where
+  `AuthRepository.restoreSession` checks the device's binding status and
+  clears the local `Session` record unless it is Active.)*
 - **FR-034**: The system MUST NOT enforce any specific session-expiration
   duration that is not explicitly defined by the business; see
   [Open Questions](#open-questions--business-rules-required).
@@ -748,7 +824,10 @@ in again as a trusted device without any OTP step.
 **Logout**
 
 - **FR-035**: Signing out MUST end the local authenticated session and
-  clear the associated session state.
+  clear the associated session state. As built, the live sign-out (Profile
+  → Sign out, after a confirmation) clears the saved partner record; it
+  does not clear the secure-storage `Session` record, which only the
+  legacy logout clears.
 - **FR-036**: Signing out MUST NOT revoke or unbind the device, and MUST
   NOT change the account's device-move count; the account's device-binding
   state MUST remain exactly as it was before sign-out.
@@ -803,11 +882,34 @@ in again as a trusted device without any OTP step.
   represents that state locally.
 - **FR-047**: Sensitive authentication and session information MUST NOT be
   stored insecurely on the device; where production-equivalent tokens or
-  credentials are involved, secure storage mechanisms MUST be used.
+  credentials are involved, secure storage mechanisms MUST be used. As
+  built, the device identifier and the `Session` record use secure
+  storage; the live path's saved partner profile (no token or credential)
+  uses the plain preferences store. No tokens exist in this prototype.
 - **FR-048**: This prototype's use of a local PostgreSQL database MUST be
   documented and treated as a prototype-only implementation detail, not as
   the intended production security boundary; the production security
   boundary is the future backend API.
+
+**Implemented behavior not covered above** *(added 2026-09-24 from the
+code)*
+
+- **FR-049**: An account with no Active device at all MUST be treated as
+  New/Untrusted on login, at the second-device tier; once its login OTP is
+  verified, the resulting binding is recorded as a `rebinding`-context
+  move, so the account's next device change is at the third-or-later
+  tier.
+- **FR-050**: Requesting a login OTP again ("Resend") MUST issue a new
+  challenge; verification checks only the account/device pair's most
+  recent unverified challenge, so earlier codes no longer verify.
+- **FR-051**: Once the device policy is satisfied (trusted device, or a
+  completed move), the app MUST load the partner's profile by mobile
+  number before showing authenticated content. If that load fails, the
+  partner stays on sign-in with an error; any binding change already
+  committed stands.
+- **FR-052**: Because no SMS is sent in this prototype, the server MUST
+  return the generated 6-digit code with each OTP challenge, and the OTP
+  screen shows it labelled as a prototype-only aid.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -840,7 +942,10 @@ in again as a trusted device without any OTP step.
 - **Session**: The prototype's representation of an authenticated session on
   a device, tracked separately from AccountDeviceBinding and from the
   account's device-move tier, including whether it was established with
-  "Keep Me Signed In" enabled.
+  "Keep Me Signed In" enabled. As built it is two local records: the
+  signed-in partner's profile (read on the live restore path) and a
+  `Session` of account id + device identifier (read only by the legacy
+  restore path).
 
 ## Design Requirements
 
@@ -882,13 +987,16 @@ new visual treatment is invented:
   styling only — see Design Note below), and successful verification.
 - **Device conflict confirmation (A4)**: the takeover confirmation dialog
   shown *before* OTP entry whenever the target device is Active for a
-  different account — including its before/after account-naming layout.
+  different account — including its before/after account-naming layout
+  *(that layout is Not implemented; the dialog uses generic copy)*.
 - **Third-or-later-device tier, not yet authorized (B1)**: the "locked to
   another device" refusal state, shown *instead of* an OTP screen.
 - **Third-or-later-device tier, authorized (B2)**: the "CRM has allowed
   this move" state, shown alongside the OTP entry for this tier.
 - **Session (B3, and the plain return-to-login case)**: session
   restoration, invalid/expired session, logout, and return-to-login.
+  *(B3's "session ended" variant of A1 exists only in the design preview;
+  the live flow never shows it.)*
 
 **Design Note — OTP attempt-limiting/lockout (A3's "Verification paused"
 card) is explicitly NOT implemented by this feature.** The Claude Design
@@ -924,6 +1032,13 @@ successful device move (either tier), successful device-conflict transfer,
 session restoration, invalid/expired session (if applicable), logout, and
 successful authentication.
 
+As built, the live flow (`/login`) renders A1, A2 (with the B2 banner at
+the third-or-later tier), A3's error styling, A4, and B1; a successful
+move or transfer goes straight to Home with no confirmation screen of its
+own. The invalid/expired-session state is **Not implemented** in the live
+flow. The live flow's copy is hard-coded English rather than localized
+(the legacy `/login/legacy` screens use the ARB strings).
+
 Do not invent new visual designs for any of these states where the Claude
 Design reference already defines their treatment; do not create
 unnecessary additional screens beyond what the design calls for. Do not
@@ -935,7 +1050,7 @@ Questions).
 
 | Aspect | Prototype (this feature) | Production (future) |
 |---|---|---|
-| Backend | None — local PostgreSQL only | REST API (ASP.NET Core API) |
+| Backend | Local `prototype_server` (Dart/`shelf`) over local PostgreSQL | REST API (ASP.NET Core API) |
 | Database | Local PostgreSQL | SQL Server |
 | SMS/OTP delivery | Simulated | Real SMS/OTP provider |
 | Rebinding authorization | Simulated as PostgreSQL state | Real CRM/backend authorization |
@@ -971,9 +1086,10 @@ This feature explicitly does NOT include:
 
 - **Registration** — the flow that establishes Device 1 (mobile-number
   entry, registration OTP, initial device binding) is a separate journey.
-  This feature does not implement, modify, or re-test any registration UI,
-  ViewModel, or backend route; it only assumes an account with an
-  established Device 1 as its starting precondition.
+  This feature does not add to the registration journey; it only assumes
+  an account with an established Device 1 as its starting precondition
+  (the legacy registration path noted under User Story 1 remains from an
+  earlier revision and is not extended).
 - Real backend APIs, real SMS/OTP delivery, or real CRM integration.
 - Any CRM screens, CRM administrator screens, CRM approval UI, CRM user
   management, CRM roles, or in-app CRM authorization controls of any kind.
@@ -1023,7 +1139,8 @@ This feature explicitly does NOT include:
   operation, never left partially applied.
 - **SC-007**: A persisted "Keep Me Signed In" session on a device that has
   since been Revoked (by a move at either tier) fails to reach
-  authenticated content when session restoration is attempted.
+  authenticated content when session restoration is attempted. *(Not met
+  on the live `/login` path — see FR-033.)*
 - **SC-008**: Signing out ends the local session while leaving the device's
   binding state and the account's device-move count unchanged, as verified
   by a subsequent trusted-device sign-in that requires no OTP.
@@ -1036,7 +1153,10 @@ This feature explicitly does NOT include:
 - Accounts (mobile number, user type) already exist in the system, with
   an established Device 1 Active binding, before any scenario in this
   feature runs; both account provisioning and the registration flow that
-  establishes Device 1 are out of this feature's scope.
+  establishes Device 1 are out of this feature's scope. In practice the
+  seeded demo accounts have no binding at all, which FR-049 covers.
+  Mobile numbers are stored as ten national digits (no `+92`, no leading
+  zero) in the app's seed data.
 - "Device" is treated in this specification as an abstract, identifiable
   unit the system can compare against a stored binding; the concrete
   mechanism for identifying a device is an implementation detail for the
@@ -1086,3 +1206,16 @@ This feature explicitly does NOT include:
   specification does not implement any such limit. **Open Question /
   Business Rule Required** if the Claude Design's A3 lockout treatment is
   to be built in a future revision.
+- **Resend countdown**: the live A2 screen waits 30 seconds before
+  allowing "Resend". The value comes from the screen, not from a business
+  rule, and the server enforces nothing. **Open Question** — confirm or
+  remove.
+- **Reuse of an Authorized decision or a verified OTP**: a completed move
+  consumes neither. A later move back to the same device for the same
+  account is satisfied by the old Authorized record (and the server-side
+  OTP re-check by any earlier verified code for that pair). **Open
+  Question** — should each move require a fresh decision and code?
+- **Server-side takeover confirmation**: the server does not record or
+  require the A4 confirmation before transferring a conflicting device.
+  **Open Question** — acceptable for the prototype, or must the server
+  enforce it?

@@ -3,9 +3,17 @@
 **Input**: [spec.md](./spec.md) Key Entities section | **Research**: [research.md](./research.md)
 
 This document translates the spec's Key Entities into a concrete logical
-model. Five entities are authoritative in PostgreSQL (per FR-036); the
-sixth, Session, is local-only (per FR-036's "session-specific local
+model. Five entities are authoritative in PostgreSQL (per FR-039); the
+sixth, Session, is local-only (per FR-039's "session-specific local
 information may use appropriate Flutter local storage").
+
+The base schema is `prototype_server/lib/db/schema.sql`. Later features'
+migrations (`db/migrations/001_first_launch_and_registration.sql`) extend
+some of these tables — extra `devices` and `accounts` columns, and on
+`otp_challenges` nullable `account_id`/`device_id`, a `mobile_number`
+column, and a third context `registration_wizard`. Those additions belong
+to the first-launch and registration-wizard features; nothing in this
+feature reads or writes them.
 
 Every table below is owned exclusively by `prototype_server` (see
 `research.md` → "PostgreSQL is reached through a separate local prototype
@@ -33,7 +41,7 @@ Device by their identifiers, not a foreign key in PostgreSQL.
 ```
 
 Invariants enforced by the schema itself (not just application logic), per
-FR-038:
+FR-041:
 
 - An account has **at most one** `AccountDeviceBinding` row with
   `status = 'active'` at any time.
@@ -50,8 +58,8 @@ Represents a Crown Solar Energy partner account (spec: **Account**).
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` (PK, default `gen_random_uuid()`) | |
-| `mobile_number` | `text`, **unique**, not null | The sole account identifier (FR-007). Format validation happens in the application layer before any query. |
-| `user_type` | `text`, not null, `CHECK (user_type IN ('installer','retailer','wholesaler','distributor'))` | One of the four supported types (Actors & User Types). No other logic branches on this value in this feature (FR-004, FR-022). |
+| `mobile_number` | `text`, **unique**, not null | The sole account identifier (FR-007), matched exactly as sent. No format validation happens before the query (the live sign-in field only restricts input to 10 digits). The app's seed data (`db/seed/001_reference_and_partners.sql`) stores ten national digits; `prototype_server/seed/seed.sql` uses a `+92…` form. |
+| `user_type` | `text`, not null, `CHECK (user_type IN ('installer','retailer','wholesaler','distributor'))` | One of the four supported types (Actors & User Types). No auth logic branches on this value (FR-004, FR-025). |
 | `status` | `text`, not null, default `'active'`, `CHECK (status = 'active')` | This feature only ever produces/reads `'active'`; broader account lifecycle (suspension, etc.) is out of scope and intentionally not modeled beyond the single value the spec's "its status" attribute requires. |
 | `created_at` | `timestamptz`, not null, default `now()` | |
 

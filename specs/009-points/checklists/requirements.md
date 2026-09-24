@@ -10,7 +10,7 @@
 ## Requirement Completeness
 - [x] Role rules and restrictions are defined
 - [x] Target scoring inclusion/exclusion is defined
-- [x] Quarterly, annual, and extra targets are defined
+- [x] Four-month, annual, and extra targets are defined
 
 ## Readiness
 - [x] Plan identifies points data and route paths

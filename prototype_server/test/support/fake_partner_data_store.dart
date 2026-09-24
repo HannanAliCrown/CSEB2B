@@ -302,11 +302,13 @@ class FakePartnerDataStore implements PartnerDataStore {
     }
 
     _decisionByApplication[applicationId] = approved;
-    if (!approved) _reject(applicationId);
+    _record(applicationId, approved: approved);
     return null;
   }
 
-  void _reject(String applicationId) {
+  /// The buying source's row takes the verdict, as the SQL `UPDATE` does,
+  /// and a rejection ends the application.
+  void _record(String applicationId, {required bool approved}) {
     final index = _applications.indexWhere((a) => a.id == applicationId);
     if (index < 0) return;
     final old = _applications[index];
@@ -314,10 +316,18 @@ class FakePartnerDataStore implements PartnerDataStore {
       id: old.id,
       reference: old.reference,
       mobileNumber: old.mobileNumber,
-      status: 'rejected',
+      status: approved ? old.status : 'rejected',
       submittedAt: old.submittedAt,
       verifyingSourceName: old.verifyingSourceName,
-      approvals: old.approvals,
+      approvals: [
+        for (final approval in old.approvals)
+          approval.approver == 'buying_source'
+              ? ApprovalRow(
+                  approver: approval.approver,
+                  state: approved ? 'approved' : 'rejected',
+                )
+              : approval,
+      ],
       businessName: old.businessName,
       contactName: old.contactName,
       role: old.role,

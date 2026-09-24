@@ -4,7 +4,7 @@
 
 ## Content Quality
 - [x] Role-specific behavior is described
-- [x] Dashboard scope excludes deferred Branding implementation
+- [x] Dashboard scope links to Shop Branding without specifying it
 - [x] Acceptance scenarios are independently testable
 
 ## Requirement Completeness

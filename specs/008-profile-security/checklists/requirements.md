@@ -15,3 +15,4 @@
 ## Readiness
 - [x] Plan identifies existing profile/session paths
 - [ ] Focused PIN tests remain to be added
+- [ ] Sign-out PIN re-lock and preference reset remain to be added

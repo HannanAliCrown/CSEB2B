@@ -7,12 +7,15 @@ description: "Tasks for complaints and notifications"
 ## Phase 1: Existing Foundation
 - [x] T001 [P] Retain complaint entities and service in `lib/features/complaints/data/complaints_service.dart`.
 - [x] T002 [P] Retain complaint/notification schema in `db/migrations/005_complaints_and_notifications.sql`.
+- [x] T012 [P] Remove complaint sub-types and key targets on category and priority in `db/migrations/010_complaints_without_subtypes.sql`.
 
 ## Phase 2: User Story 1 - Complaints
 - [x] T003 [US1] Load catalogue and SLA targets through `prototype_server/lib/routes/complaints_routes.dart`.
 - [x] T004 [US1] Validate complaint creation and preserve target timestamps in `prototype_server/lib/data/postgres_complaints_data_store.dart`.
 - [x] T005 [US1] Render list, create, detail, and event timeline screens in `lib/features/complaints/ui/`.
 - [x] T006 [US1] Test validation, account isolation, and SLA data in `prototype_server/test/routes/complaints_test.dart`.
+- [x] T013 [US1] Write the "Complaint raised" event and notification on creation in `prototype_server/lib/data/postgres_complaints_data_store.dart`.
+- [x] T014 [US1] Test SLA met/overdue rules and time formatting in `test/features/complaints/complaints_service_test.dart`.
 
 ## Phase 3: User Story 2 - Notifications
 - [x] T007 [US2] Load unread count and notification list in `lib/features/complaints/data/complaints_service.dart`.

@@ -36,10 +36,12 @@ void main() {
 
   dynamic router() => buildRouter(auth, partners: partners);
 
-  /// An installer applying, naming [source] as where they buy.
+  /// An installer applying, naming [source] as where they buy, and
+  /// [secondSource] after it when given.
   Future<String> apply({
     String mobileNumber = applicant,
     String source = alNoor,
+    String? secondSource,
   }) async {
     final result = await partners.submitApplication(
       ApplicationInput(
@@ -50,7 +52,11 @@ void main() {
         businessAddress: 'Shop 14, Bilal Market, Shahdara',
         cnicNumber: '3520212345${mobileNumber.substring(6)}',
         marketName: 'Ravi Road, Lahore',
-        buyingSources: [BuyingSourceInput(position: 0, mobileNumber: source)],
+        buyingSources: [
+          BuyingSourceInput(position: 0, mobileNumber: source),
+          if (secondSource != null)
+            BuyingSourceInput(position: 1, mobileNumber: secondSource),
+        ],
       ),
     );
     return result.application!.id;
@@ -104,6 +110,31 @@ void main() {
       expect(body['outstanding'], 0);
     });
 
+    test('only the first buying source receives the request', () async {
+      await apply(secondSource: hamza);
+
+      final first =
+          (await getJson(
+                router(),
+                '/profile-requests?mobileNumber=$alNoor',
+              ))['body']
+              as Map;
+      final second =
+          (await getJson(
+                router(),
+                '/profile-requests?mobileNumber=$hamza',
+              ))['body']
+              as Map;
+
+      expect((first['requests'] as List).length, 1);
+      expect(
+        (second['requests'] as List),
+        isEmpty,
+        reason: 'sources named after the first are not asked to verify',
+      );
+      expect(second['outstanding'], 0);
+    });
+
     test('an unknown number has no inbox', () async {
       final result = await getJson(
         router(),
@@ -149,6 +180,40 @@ void main() {
               as Map;
       expect((stillWaiting['requests'] as List).length, 1);
     });
+
+    test('a later buying source cannot decide the request', () async {
+      final id = await apply(secondSource: hamza);
+
+      final result = await decide(applicationId: id, mobileNumber: hamza);
+
+      expect(result['statusCode'], 404);
+      final application = await partners.latestApplicationForNumber(applicant);
+      expect(
+        application!.approvals
+            .singleWhere((a) => a.approver == 'buying_source')
+            .state,
+        'outstanding',
+      );
+    });
+
+    test(
+      'the first source approving marks the buying source approved',
+      () async {
+        final id = await apply(secondSource: hamza);
+        await decide(applicationId: id);
+
+        final application = await partners.latestApplicationForNumber(
+          applicant,
+        );
+        expect(
+          application!.approvals
+              .singleWhere((a) => a.approver == 'buying_source')
+              .state,
+          'approved',
+          reason: 'one approval from the first source is all that is needed',
+        );
+      },
+    );
 
     test('deciding twice changes nothing the second time', () async {
       final id = await apply();

@@ -11,20 +11,22 @@ description: "Tasks for profile and security"
 ## Phase 2: User Story 1 - Profile Identity
 - [x] T003 [US1] Render identity and role data in `lib/features/profile/ui/views/profile_tab.dart`.
 - [x] T004 [US1] Render partner QR screen in `lib/features/profile/ui/views/my_qr_code_screen.dart`.
-- [ ] T005 [US1] Connect QR payload resolution to real cash/chat/points discovery services in `lib/features/profile/ui/views/my_qr_code_screen.dart` and the receiving repositories.
+- [x] T005 [US1] Resolve scanned profile QR numbers in `lib/features/wallet/ui/views/send_cash_screen.dart`, `lib/features/points/ui/views/send_points_screen.dart`, and `lib/features/chat/ui/views/new_conversation_screen.dart`.
 
 ## Phase 3: User Story 2 - Preferences and PIN
 - [x] T006 [US2] Support language/theme settings in `lib/features/profile/ui/views/settings_pages.dart` and `lib/features/profile/ui/app_settings_controller.dart`.
 - [x] T007 [US2] Support four-digit PIN set/change/verify/disable in `lib/features/profile/ui/views/app_security_page.dart` and `lib/features/profile/ui/views/pin_gate.dart`.
 - [x] T008 [US2] Keep sign-out local and independent of device binding in `lib/features/session/ui/session_controller.dart`.
 - [ ] T009 [US2] Add focused PIN and preference tests in `test/features/profile/` and `test/features/session/`.
+- [x] T013 [US2] Test settings, PIN, support, and About routes in `prototype_server/test/routes/profile_test.dart`.
+- [ ] T014 [US2] Re-lock `PinLock` and reset `AppSettingsController` on sign-out in `lib/app/shell/app_shell.dart` (FR-014).
 
 ## Phase 4: User Story 3 - Contacts and Support
 - [x] T010 [US3] Filter synced contacts to known Crown Solar partners in `lib/features/profile/data/contacts_repository.dart`.
 - [x] T011 [US3] Open support numbers through the phone dialer in `lib/features/profile/ui/views/settings_pages.dart`.
 
 ## Phase 5: Polish
-- [ ] T012 Keep token expiry/refresh absent from `lib/features/session/data/session_repository.dart` until separately specified.
+- [x] T012 Keep token expiry/refresh absent from `lib/features/session/data/session_repository.dart` until separately specified.
 
 ## Dependencies
 - US2 depends on the profile service and active session.
