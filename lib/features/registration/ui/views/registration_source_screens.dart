@@ -6,7 +6,8 @@ import '../../../design_preview/preview_journey.dart';
 import '../../data/models/registration_draft.dart';
 import '../registration_scope.dart';
 import '../widgets/registration_scaffold.dart';
-import 'registration_wizard_screens.dart' show anyMobileNumberFormatters;
+import 'registration_wizard_screens.dart'
+    show anyMobileNumberFormatters, isCompleteMobileNumber;
 
 /// Board 01 · F1 — Step 6 · Buying source.
 ///
@@ -247,17 +248,13 @@ class _SourceCard extends StatelessWidget {
                 ? null
                 : anyMobileNumberFormatters,
             placeholder: controller == null ? null : '0300 7781204',
-            onChanged: onLookup == null ? null : (_) {},
-            suffix: onLookup == null
+            // Looked up as soon as the whole number is in — never on a
+            // partial one, which could only ever come back "not found".
+            onChanged: onLookup == null
                 ? null
-                : GestureDetector(
-                    onTap: () => onLookup!(controller?.text ?? ''),
-                    child: Icon(
-                      LucideIcons.search,
-                      size: 18,
-                      color: context.colors.primary,
-                    ),
-                  ),
+                : (text) {
+                    if (isCompleteMobileNumber(text)) onLookup!(text);
+                  },
           ),
           if (notFound) ...[
             const SizedBox(height: AppSpacing.stepMd),

@@ -39,6 +39,13 @@ final anyMobileNumberFormatters = <TextInputFormatter>[
   LengthLimitingTextInputFormatter(13),
 ];
 
+/// Whether [text] is a whole mobile number in one of the forms
+/// [anyMobileNumberFormatters] accepts. The leading 0 stands for +92 or 92,
+/// so each form carries the same ten subscriber digits after its prefix:
+/// 03001122334 (11), 923001122334 (12), +923001122334 (13), 3001122334 (10).
+bool isCompleteMobileNumber(String text) =>
+    RegExp(r'^((0|92|\+92)\d{10}|3\d{9})$').hasMatch(text.trim());
+
 Widget _continueFooter(
   BuildContext context, {
   String label = 'Continue',
@@ -473,6 +480,11 @@ class _RegistrationDetailsScreenState extends State<RegistrationDetailsScreen> {
                 label: market,
                 onTap: () => Navigator.of(context).pop(market),
               ),
+            // Clears the phone's navigation bar so the last market is not
+            // cut off beneath it.
+            SizedBox(
+              height: MediaQuery.viewPaddingOf(context).bottom + AppSpacing.sm,
+            ),
           ],
         ),
       ),
