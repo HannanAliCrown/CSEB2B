@@ -3,6 +3,7 @@ import 'package:postgres/postgres.dart';
 import '../db/postgres_client.dart';
 import 'complaints_data_store.dart';
 import 'postgres_partner_data_store.dart' show normaliseMobile;
+import 'staff_models.dart';
 
 /// The [ComplaintsDataStore] backed by PostgreSQL.
 class PostgresComplaintsDataStore implements ComplaintsDataStore {
@@ -18,6 +19,7 @@ class PostgresComplaintsDataStore implements ComplaintsDataStore {
     c.reference, c.priority, c.title, c.detail, c.status, c.evidence_note,
     c.response_target_minutes, c.resolution_target_working_days,
     c.raised_at, c.first_response_at, c.resolved_at,
+    c.raised_by_staff_name, c.raised_by_staff_role,
     t.label AS type_label,
     COALESCE(t.short_label, t.label) AS category_label
   ''';
@@ -322,6 +324,7 @@ class PostgresComplaintsDataStore implements ComplaintsDataStore {
       resolutionDueAt: addWorkingDays(raisedAt, workingDays),
       firstResponseAt: row['first_response_at'] as DateTime?,
       resolvedAt: row['resolved_at'] as DateTime?,
+      raisedBy: RaisedByRow.fromColumns(row),
       events: events,
     );
   }

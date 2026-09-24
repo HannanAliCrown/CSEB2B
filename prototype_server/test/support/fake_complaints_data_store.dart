@@ -1,4 +1,5 @@
 import 'package:prototype_server/data/complaints_data_store.dart';
+import 'package:prototype_server/data/staff_models.dart';
 import 'package:prototype_server/data/postgres_partner_data_store.dart'
     show normaliseMobile;
 
@@ -16,6 +17,11 @@ class FakeComplaintsDataStore implements ComplaintsDataStore {
   var _nextId = 1;
 
   // --- Test setup ---
+
+  /// Marks a ticket as raised by a Crown Solar Teams officer, as the Teams
+  /// server's write would.
+  void raisedByOfficer(String reference, RaisedByRow officer) =>
+      _complaints[reference]!.raisedBy = officer;
 
   void addAccount(String mobileNumber) =>
       _accounts[normaliseMobile(mobileNumber)] = 'acc${_nextId++}';
@@ -205,6 +211,9 @@ class _Complaint {
   final DateTime raisedAt;
   final String status = 'in_progress';
 
+  /// Set only for a ticket an officer raised through Crown Solar Teams.
+  RaisedByRow? raisedBy;
+
   ComplaintRow toRow({List<ComplaintEventRow> events = const []}) =>
       ComplaintRow(
         reference: reference,
@@ -218,6 +227,7 @@ class _Complaint {
         resolutionTargetWorkingDays: resolutionTargetWorkingDays,
         raisedAt: raisedAt,
         resolutionDueAt: addWorkingDays(raisedAt, resolutionTargetWorkingDays),
+        raisedBy: raisedBy,
         events: events,
       );
 }

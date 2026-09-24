@@ -197,6 +197,30 @@ class PostgresInaamDataStore implements InaamDataStore {
     return refusal != null ? (null, refusal) : (result, null);
   }
 
+  // --- Shown per market (specs/013-teams-support, CSE-6) --------------------
+
+  /// Super Admin decides which markets see a scheme. One with no markets
+  /// listed is shown everywhere, which is how every scheme behaved before
+  /// markets could be chosen. Needs `s` = item_schemes and `@accountId`.
+  static const _itemSchemeInMarket = '''
+    (NOT EXISTS (SELECT 1 FROM item_scheme_markets x WHERE x.scheme_id = s.id)
+     OR EXISTS (
+       SELECT 1 FROM item_scheme_markets x
+         JOIN accounts a ON a.market_id = x.market_id
+        WHERE x.scheme_id = s.id AND a.id = @accountId::uuid
+     ))
+  ''';
+
+  /// The same rule for reward programs. Needs `p` = reward_programs.
+  static const _rewardProgramInMarket = '''
+    (NOT EXISTS (SELECT 1 FROM reward_program_markets x WHERE x.program_id = p.id)
+     OR EXISTS (
+       SELECT 1 FROM reward_program_markets x
+         JOIN accounts a ON a.market_id = x.market_id
+        WHERE x.program_id = p.id AND a.id = @accountId::uuid
+     ))
+  ''';
+
   // --- Item Schemes ---------------------------------------------------------
 
   @override
@@ -204,12 +228,16 @@ class PostgresInaamDataStore implements InaamDataStore {
     final accountId = await _accountId(mobileNumber);
     if (accountId == null) return null;
 
-    final schemes = await _client.pool.execute('''
-      SELECT id, name, measure, starts_on, ends_on
-        FROM item_schemes
-       WHERE active AND ends_on >= current_date
-       ORDER BY starts_on, name
-    ''');
+    final schemes = await _client.pool.execute(
+      Sql.named('''
+        SELECT s.id, s.name, s.measure, s.starts_on, s.ends_on
+          FROM item_schemes s
+         WHERE s.active AND s.ends_on >= current_date
+           AND $_itemSchemeInMarket
+         ORDER BY s.starts_on, s.name
+      '''),
+      parameters: {'accountId': accountId},
+    );
 
     final result = <ItemSchemeRow>[];
     for (final record in schemes) {
@@ -329,11 +357,12 @@ class PostgresInaamDataStore implements InaamDataStore {
 
     final schemes = await _client.pool.execute(
       Sql.named('''
-        SELECT id, name, measure, starts_on, ends_on
-          FROM item_schemes
-         WHERE id = @id::uuid AND active AND ends_on >= current_date
+        SELECT s.id, s.name, s.measure, s.starts_on, s.ends_on
+          FROM item_schemes s
+         WHERE s.id = @id::uuid AND s.active AND s.ends_on >= current_date
+           AND $_itemSchemeInMarket
       '''),
-      parameters: {'id': schemeId},
+      parameters: {'id': schemeId, 'accountId': accountId},
     );
     if (schemes.isEmpty) return (null, ClaimRefusal.unknownTier);
 
@@ -420,13 +449,17 @@ class PostgresInaamDataStore implements InaamDataStore {
     final accountId = await _accountId(mobileNumber);
     if (accountId == null) return null;
 
-    final programs = await _client.pool.execute('''
-      SELECT id, label, starts_on, ends_on
-        FROM reward_programs
-       WHERE current_date BETWEEN starts_on AND ends_on
-       ORDER BY starts_on DESC
-       LIMIT 1
-    ''');
+    final programs = await _client.pool.execute(
+      Sql.named('''
+        SELECT p.id, p.label, p.starts_on, p.ends_on
+          FROM reward_programs p
+         WHERE current_date BETWEEN p.starts_on AND p.ends_on
+           AND $_rewardProgramInMarket
+         ORDER BY p.starts_on DESC
+         LIMIT 1
+      '''),
+      parameters: {'accountId': accountId},
+    );
 
     // What last month earned, and is paying out now.
     final award = await _client.pool.execute(

@@ -1,3 +1,5 @@
+import 'staff_models.dart';
+
 /// What a partner is measured against when board types are filtered.
 class BrandingEligibilityRow {
   const BrandingEligibilityRow({
@@ -162,6 +164,7 @@ class BrandingRequestRow {
     this.contactNumber,
     this.personName,
     this.rejectionReason,
+    this.raisedBy,
   });
 
   final String reference;
@@ -183,6 +186,10 @@ class BrandingRequestRow {
   final String? personName;
   final String? rejectionReason;
 
+  /// The officer who raised it through Crown Solar Teams; null when the
+  /// partner raised it.
+  final RaisedByRow? raisedBy;
+
   int get totalPaisa => boards.fold(0, (sum, b) => sum + b.unitPricePaisa);
   int get companyPaisa => boards.fold(0, (sum, b) => sum + b.companyPaisa);
   int get partnerPaisa => totalPaisa - companyPaisa;
@@ -200,6 +207,7 @@ class BrandingRequestRow {
     'contactNumber': contactNumber,
     'personName': personName,
     'rejectionReason': rejectionReason,
+    'raisedBy': raisedBy?.toJson(),
     'totalPaisa': totalPaisa,
     'companyPaisa': companyPaisa,
     'partnerPaisa': partnerPaisa,

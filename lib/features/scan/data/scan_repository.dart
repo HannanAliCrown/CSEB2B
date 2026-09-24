@@ -17,6 +17,10 @@ enum ScanVerdict {
   /// Not a Crown Solar code at all.
   notRecognised,
 
+  /// Created by Crown Solar but not yet assigned to a product serial, so it
+  /// is not a product yet and pays nothing (specs/013-teams-support, CSE-7).
+  unassigned,
+
   /// Withdrawn — a batch Crown Solar has blocked.
   blocked,
 
@@ -247,6 +251,13 @@ class MockScanRepository implements ScanRepository {
         code: normalised,
         mode: mode,
         verdict: ScanVerdict.notRecognised,
+      );
+    }
+    if (normalised.startsWith('CS-NEW')) {
+      return ScanOutcome(
+        code: normalised,
+        mode: mode,
+        verdict: ScanVerdict.unassigned,
       );
     }
     if (normalised.startsWith('CS-BAT')) {

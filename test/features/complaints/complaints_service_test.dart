@@ -10,6 +10,7 @@ Complaint complaintJson({
   String status = 'in_progress',
   int responseTargetMinutes = 240,
   int resolutionWorkingDays = 2,
+  Map<String, dynamic>? raisedBy,
 }) => Complaint.fromJson({
   'reference': 'CMP-2026-5514',
   'typeLabel': 'QR and prizes',
@@ -29,6 +30,7 @@ Complaint complaintJson({
   'firstResponseAt': firstResponseAt?.toUtc().toIso8601String(),
   'resolvedAt': resolvedAt?.toUtc().toIso8601String(),
   'events': const [],
+  'raisedBy': raisedBy,
 });
 
 void main() {
@@ -135,6 +137,24 @@ void main() {
       expect(formatDurationWords(const Duration(hours: 4)), '4 hours');
       expect(formatDurationWords(const Duration(hours: 1)), '1 hour');
       expect(formatDurationWords(const Duration(minutes: 45)), '45 minutes');
+    });
+  });
+
+  group('raised by', () {
+    test('names the officer and role when an officer raised it', () {
+      final complaint = complaintJson(
+        raisedAt: DateTime(2026, 9, 24, 9),
+        raisedBy: {'name': 'Imran Aslam', 'role': 'mo'},
+      );
+
+      expect(complaint.raisedBy?.name, 'Imran Aslam');
+      expect(complaint.raisedBy?.roleLabel, 'Marketing Officer');
+    });
+
+    test('is absent when the partner raised it', () {
+      final complaint = complaintJson(raisedAt: DateTime(2026, 9, 24, 9));
+
+      expect(complaint.raisedBy, isNull);
     });
   });
 

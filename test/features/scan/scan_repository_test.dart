@@ -55,6 +55,18 @@ void main() {
       expect(outcome.verdict, ScanVerdict.blocked);
     });
 
+    test('a code not yet assigned to a product pays nothing', () async {
+      final outcome = await _build().scanner.check(
+        code: 'CS-NEW-0001',
+        user: _installer,
+        mode: ScanMode.win,
+      );
+
+      expect(outcome.verdict, ScanVerdict.unassigned);
+      expect(outcome.product, isNull);
+      expect(outcome.hasPrize, isFalse);
+    });
+
     test('a winning scan credits the wallet and the ledger', () async {
       final harness = _build();
       final before = await harness.wallet.balance(_installer);

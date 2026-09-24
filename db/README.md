@@ -31,6 +31,8 @@ endpoints, different base URL.
 | `migrations/008_profile_requests_and_cash_requests.sql` | Expected-purchase bands, and the two rules a buying source's verdict must satisfy. |
 | `migrations/009_inaam_baazar.sql` | The spin wheel and its spins, item schemes with their one claim, and the monthly reward programme. |
 | `migrations/010_complaints_without_subtypes.sql` | Drops complaint sub-types; targets and tickets key on the category instead. |
+| `migrations/011_shop_branding.sql` | Shop branding: board types, eligibility rules, requests and installed boards. |
+| `migrations/012_teams_support.sql` | Crown Solar Teams support: officer on approvals, complaints and branding; closed accounts; staff chat parties; market targeting; unassigned codes. |
 | `seed/001_reference_and_partners.sql` | Markets and the six demo partners, matching what the mocks used. |
 | `seed/002_dashboard.sql` | The wallet movements, slides and ticker lines Home has been showing. |
 | `seed/003_space_and_chat.sql` | Opening Space posts and the two department conversations. |
@@ -40,6 +42,8 @@ endpoints, different base URL.
 | `seed/007_points_and_targets.sql` | Transfer rules, three schemes, board 06's ledger, and one partner's extra targets. |
 | `seed/008_profile_requests_and_cash_requests.sql` | The expected-purchase bands, and three transfers already held on a retailer's inbox. |
 | `seed/009_inaam_baazar.sql` | More codes to scan, the wheel and its odds, two item schemes, and two months of the reward programme. |
+| `seed/010_shop_branding.sql` | Board types, their role rules, and branding history on the demo partners. |
+| `seed/011_teams_support.sql` | An officer-raised complaint and branding request, an officer chat, a Ravi Road-only item scheme and an unassigned code. |
 
 Migrations are idempotent — every statement is `IF NOT EXISTS` or guarded —
 so re-running one is safe.

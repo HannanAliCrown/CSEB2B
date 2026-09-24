@@ -1,3 +1,5 @@
+import 'staff_models.dart';
+
 /// One of the chips on step 1 of the complaint wizard, and what Crown Solar
 /// promises for it at each priority.
 ///
@@ -110,6 +112,7 @@ class ComplaintRow {
     this.evidenceNote,
     this.firstResponseAt,
     this.resolvedAt,
+    this.raisedBy,
     this.events = const [],
   });
 
@@ -145,6 +148,10 @@ class ComplaintRow {
   final DateTime? firstResponseAt;
   final DateTime? resolvedAt;
 
+  /// The officer who raised it through Crown Solar Teams; null when the
+  /// partner raised it.
+  final RaisedByRow? raisedBy;
+
   /// Empty on the list; filled on the detail.
   final List<ComplaintEventRow> events;
 
@@ -163,6 +170,7 @@ class ComplaintRow {
     'resolutionDueAt': resolutionDueAt.toUtc().toIso8601String(),
     'firstResponseAt': firstResponseAt?.toUtc().toIso8601String(),
     'resolvedAt': resolvedAt?.toUtc().toIso8601String(),
+    'raisedBy': raisedBy?.toJson(),
     'events': [for (final event in events) event.toJson()],
   };
 }

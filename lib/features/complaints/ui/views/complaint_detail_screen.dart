@@ -102,6 +102,18 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
             Expanded(child: _resolutionCard(complaint)),
           ],
         ),
+        // Only for a ticket an officer raised through Crown Solar Teams. One
+        // the partner raised has no such row at all.
+        if (complaint.raisedBy case final officer?)
+          DsRowGroup(
+            children: [
+              DsSettingRow(
+                label: 'Raised by',
+                value: officer.name,
+                meta: officer.roleLabel,
+              ),
+            ],
+          ),
         DsCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

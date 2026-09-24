@@ -8,6 +8,7 @@ import 'package:prototype_server/data/postgres_partner_data_store.dart'
 /// conversation shared between two parties rather than a copy each.
 class FakeSocialDataStore implements SocialDataStore {
   final Map<String, ({String role, String name})> _accounts = {};
+  final Map<String, ({String role, String name})> _staff = {};
   final List<_Post> _posts = [];
   final List<_Thread> _threads = [];
 
@@ -20,6 +21,12 @@ class FakeSocialDataStore implements SocialDataStore {
     required String role,
     required String name,
   }) => _accounts[normaliseMobile(mobileNumber)] = (role: role, name: name);
+
+  void addStaffParty({
+    required String address,
+    required String role,
+    required String name,
+  }) => _staff[address] = (role: role, name: name);
 
   String addPost({required String title, String audience = 'all'}) {
     final post = _Post(id: 'p${_nextId++}', title: title, audience: audience);
@@ -179,6 +186,16 @@ class FakeSocialDataStore implements SocialDataStore {
   Future<ChatPartyRow?> resolveParty(String address) async {
     if (address.startsWith('dept:')) {
       return ChatPartyRow(address: address, isDepartment: true);
+    }
+    if (address.startsWith('staff:')) {
+      final staff = _staff[address];
+      if (staff == null) return null;
+      return ChatPartyRow(
+        address: address,
+        isDepartment: false,
+        name: staff.name,
+        role: staff.role,
+      );
     }
     final number = normaliseMobile(address);
     final account = _accounts[number];

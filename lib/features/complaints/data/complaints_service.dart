@@ -7,6 +7,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../core/staff/raised_by.dart';
+
 /// How urgent a complaint is.
 enum ComplaintPriority { low, medium, high }
 
@@ -149,6 +151,7 @@ class Complaint {
     this.evidenceNote,
     this.firstResponseAt,
     this.resolvedAt,
+    this.raisedBy,
     this.events = const [],
   });
 
@@ -174,6 +177,9 @@ class Complaint {
   final DateTime resolutionDueAt;
   final DateTime? firstResponseAt;
   final DateTime? resolvedAt;
+
+  /// Only when an officer raised it through Crown Solar Teams.
+  final RaisedBy? raisedBy;
 
   /// Empty on the list; filled on the detail.
   final List<ComplaintEvent> events;
@@ -209,6 +215,7 @@ class Complaint {
         .toLocal(),
     firstResponseAt: _dateOrNull(json['firstResponseAt']),
     resolvedAt: _dateOrNull(json['resolvedAt']),
+    raisedBy: RaisedBy.fromJson(json['raisedBy']),
     events: [
       for (final entry in json['events'] as List? ?? const [])
         ComplaintEvent.fromJson(entry as Map<String, dynamic>),

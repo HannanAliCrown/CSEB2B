@@ -183,6 +183,14 @@ class _BrandingStatusScreenState extends State<BrandingStatusScreen> {
 
   Widget _moneyRows(BrandingRequest request) => DsRowGroup(
     children: [
+      // Only for a request an officer raised through Crown Solar Teams. One
+      // the partner raised has no such row at all.
+      if (request.raisedBy case final officer?)
+        DsSettingRow(
+          label: 'Raised by',
+          value: officer.name,
+          meta: officer.roleLabel,
+        ),
       // One board names itself; several are counted here and named one by
       // one in the breakdown below, so this row never has to carry a list.
       DsSettingRow(
@@ -278,6 +286,18 @@ class _BrandingStatusScreenState extends State<BrandingStatusScreen> {
         ],
       ),
     ),
+    if (request.raisedBy case final officer?) ...[
+      const SizedBox(height: AppSpacing.md),
+      DsRowGroup(
+        children: [
+          DsSettingRow(
+            label: 'Raised by',
+            value: officer.name,
+            meta: officer.roleLabel,
+          ),
+        ],
+      ),
+    ],
     const SizedBox(height: AppSpacing.md),
     DsButton(
       label: 'Start a New Request',

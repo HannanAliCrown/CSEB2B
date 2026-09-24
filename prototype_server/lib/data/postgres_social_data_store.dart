@@ -250,6 +250,25 @@ class PostgresSocialDataStore implements SocialDataStore {
       return ChatPartyRow(address: address, isDepartment: true);
     }
 
+    if (address.startsWith('staff:')) {
+      // A Crown Solar Teams officer, named by the row Teams keeps here.
+      final staff = await _client.pool.execute(
+        Sql.named(
+          'SELECT display_name, role FROM chat_staff_parties '
+          'WHERE address = @address',
+        ),
+        parameters: {'address': address},
+      );
+      if (staff.isEmpty) return null;
+      final row = staff.first.toColumnMap();
+      return ChatPartyRow(
+        address: address,
+        isDepartment: false,
+        name: row['display_name'] as String,
+        role: row['role'] as String,
+      );
+    }
+
     final number = normaliseMobile(address);
     final result = await _client.pool.execute(
       Sql.named(

@@ -91,11 +91,14 @@ class ChatPartyRow {
     this.market,
   });
 
-  /// Ten national digits, or `dept:<name>`.
+  /// Ten national digits, `dept:<name>`, or `staff:<id>` for a Crown Solar
+  /// Teams officer.
   final String address;
   final bool isDepartment;
 
   final String? name;
+
+  /// A partner's user type, or `mo` / `asm` / `rsm` for an officer.
   final String? role;
   final String? market;
 

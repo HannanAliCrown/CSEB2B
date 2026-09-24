@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../core/staff/raised_by.dart';
 import '../../session/data/signed_in_user.dart';
 import 'chat_repository.dart';
 
@@ -170,6 +171,8 @@ class HttpChatRepository implements ChatRepository {
     'retailer' => 'Retailer',
     'wholesaler' => 'Wholesaler',
     'distributor' => 'Distributor',
+    // A Crown Solar Teams officer (specs/013-teams-support, CSE-5).
+    'mo' || 'asm' || 'rsm' => staffRoleLabel(userType),
     _ => '',
   };
 

@@ -1,4 +1,5 @@
 import 'package:prototype_server/data/complaints_data_store.dart';
+import 'package:prototype_server/data/staff_models.dart';
 import 'package:prototype_server/router.dart';
 import 'package:test/test.dart';
 
@@ -179,6 +180,26 @@ void main() {
         404,
         reason: '403 would confirm the ticket exists',
       );
+    });
+
+    test('names the officer only when an officer raised it', () async {
+      final reference = ((await raise())['body'] as Map)['reference'] as String;
+      final path = '/complaints/$reference?mobileNumber=$adnan';
+
+      final own = (await getJson(router(), path))['body'] as Map;
+      expect(own['raisedBy'], isNull, reason: 'the partner raised it');
+
+      complaints.raisedByOfficer(
+        reference,
+        const RaisedByRow(name: 'Imran Aslam', role: 'mo'),
+      );
+      final officer = (await getJson(router(), path))['body'] as Map;
+      expect(officer['raisedBy'], {'name': 'Imran Aslam', 'role': 'mo'});
+
+      final list =
+          (await getJson(router(), '/complaints?mobileNumber=$adnan'))['body']
+              as Map;
+      expect((list['complaints'] as List).single['raisedBy'], isNotNull);
     });
   });
 

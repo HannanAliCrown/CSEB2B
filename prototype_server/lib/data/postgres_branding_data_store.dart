@@ -3,6 +3,7 @@ import 'package:postgres/postgres.dart';
 import '../db/postgres_client.dart';
 import 'branding_data_store.dart';
 import 'postgres_partner_data_store.dart' show normaliseMobile;
+import 'staff_models.dart';
 
 /// The [BrandingDataStore] backed by PostgreSQL.
 ///
@@ -53,7 +54,8 @@ class PostgresBrandingDataStore implements BrandingDataStore {
       Sql.named('''
         SELECT id, reference, status, stage, height_ft, width_ft,
                board_count, shop_address, contact_number, person_name,
-               rejection_reason, created_at
+               rejection_reason, created_at,
+               raised_by_staff_name, raised_by_staff_role
           FROM branding_requests
          WHERE account_id = @accountId::uuid AND reference = @reference
       '''),
@@ -474,7 +476,8 @@ class PostgresBrandingDataStore implements BrandingDataStore {
       Sql.named('''
         SELECT id, reference, status, stage, height_ft, width_ft,
                board_count, shop_address, contact_number, person_name,
-               rejection_reason, created_at
+               rejection_reason, created_at,
+               raised_by_staff_name, raised_by_staff_role
           FROM branding_requests
          WHERE account_id = @accountId::uuid
          ORDER BY created_at DESC
@@ -511,6 +514,7 @@ class PostgresBrandingDataStore implements BrandingDataStore {
       contactNumber: row['contact_number'] as String?,
       personName: row['person_name'] as String?,
       rejectionReason: row['rejection_reason'] as String?,
+      raisedBy: RaisedByRow.fromColumns(row),
       boards: [
         for (final record in boards)
           BrandingRequestBoardRow(

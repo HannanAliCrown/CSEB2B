@@ -300,6 +300,30 @@ void main() {
       expect(stranger['statusCode'], 404);
     });
 
+    test(
+      'an officer resolves by name and role; an unknown one does not',
+      () async {
+        social.addStaffParty(
+          address: 'staff:mo-1',
+          role: 'mo',
+          name: 'Imran Aslam',
+        );
+
+        final officer = await getJson(
+          router(),
+          '/chat/party?address=staff:mo-1',
+        );
+        expect(officer['statusCode'], 200);
+        final body = officer['body'] as Map;
+        expect(body['isDepartment'], isFalse);
+        expect(body['name'], 'Imran Aslam');
+        expect(body['role'], 'mo');
+
+        final unknown = await getJson(router(), '/chat/party?address=staff:x');
+        expect(unknown['statusCode'], 404);
+      },
+    );
+
     test('a partner cannot start a conversation with themselves', () async {
       final result = await postJson(router(), '/chat/threads/open', {
         'mobileNumber': adnan,

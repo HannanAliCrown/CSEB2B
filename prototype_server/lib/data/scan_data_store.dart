@@ -50,7 +50,8 @@ class ScanOutcomeRow {
 
   final String code;
 
-  /// 'genuine' | 'already_scanned' | 'not_recognised' | 'blocked'.
+  /// 'genuine' | 'already_scanned' | 'not_recognised' | 'blocked' |
+  /// 'unassigned'.
   final String verdict;
 
   final ScannedProductRow? product;

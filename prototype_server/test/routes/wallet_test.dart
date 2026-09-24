@@ -290,6 +290,7 @@ void main() {
         ..addProduct(code: 'CS-INV-8841', winsPrize: true)
         ..addProduct(code: 'CS-PNL-2207')
         ..addProduct(code: 'CS-BAT-7788', blocked: true)
+        ..addProduct(code: 'CS-NEW-0001', unassigned: true)
         ..addPrizeBand(role: 'installer', amountPaisa: 50000);
     });
 
@@ -327,6 +328,16 @@ void main() {
       expect(body['verdict'], 'genuine');
       expect(body['prizePaisa'], isNull);
       expect(scan.hasClaim(code: 'CS-PNL-2207', role: 'installer'), isTrue);
+    });
+
+    test('a code not yet assigned to a product pays nothing', () async {
+      final body =
+          (await check(code: 'CS-NEW-0001', claim: true))['body'] as Map;
+
+      expect(body['verdict'], 'unassigned');
+      expect(body['product'], isNull);
+      expect(body['prizePaisa'], isNull);
+      expect(scan.hasClaim(code: 'CS-NEW-0001', role: 'installer'), isFalse);
     });
 
     test('a second installer on the same code is turned away', () async {

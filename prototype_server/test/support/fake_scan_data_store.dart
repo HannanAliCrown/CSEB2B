@@ -7,8 +7,11 @@ import 'package:prototype_server/data/scan_data_store.dart';
 /// no prize band meaning no prize.
 class FakeScanDataStore implements ScanDataStore {
   final Map<String, ({String role, String name})> _accounts = {};
-  final Map<String, ({String name, bool blocked, bool winsPrize})> _products =
-      {};
+  final Map<
+    String,
+    ({String name, bool blocked, bool unassigned, bool winsPrize})
+  >
+  _products = {};
   final Map<String, int> _prizeByRole = {};
 
   /// Keyed 'code/role', as the unique key is.
@@ -26,8 +29,14 @@ class FakeScanDataStore implements ScanDataStore {
     required String code,
     String name = 'Crown Solar 8kW Hybrid Inverter',
     bool blocked = false,
+    bool unassigned = false,
     bool winsPrize = false,
-  }) => _products[code] = (name: name, blocked: blocked, winsPrize: winsPrize);
+  }) => _products[code] = (
+    name: name,
+    blocked: blocked,
+    unassigned: unassigned,
+    winsPrize: winsPrize,
+  );
 
   void addPrizeBand({required String role, required int amountPaisa}) =>
       _prizeByRole[role] = amountPaisa;
@@ -71,10 +80,11 @@ class FakeScanDataStore implements ScanDataStore {
   }
 
   static String _meaningFor(
-    ({String name, bool blocked, bool winsPrize}) product, {
+    ({String name, bool blocked, bool unassigned, bool winsPrize}) product, {
     required bool taken,
     required bool canWin,
   }) {
+    if (product.unassigned) return 'Not yet assigned';
     if (product.blocked) return 'Blocked batch';
     if (!canWin) return 'Genuine product';
     if (taken) return 'Already scanned';
@@ -96,6 +106,10 @@ class FakeScanDataStore implements ScanDataStore {
     final product = _products[normalised];
     if (product == null) {
       return ScanOutcomeRow(code: normalised, verdict: 'not_recognised');
+    }
+
+    if (product.unassigned) {
+      return ScanOutcomeRow(code: normalised, verdict: 'unassigned');
     }
 
     final row = ScannedProductRow(

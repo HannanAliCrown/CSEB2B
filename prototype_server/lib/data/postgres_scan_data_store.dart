@@ -57,6 +57,7 @@ class PostgresScanDataStore implements ScanDataStore {
   /// What this code will do for this partner, from its own row rather than
   /// from a list written beside it.
   static String _meaningFor(Map<String, dynamic> row, {required bool canWin}) {
+    if (row['state'] == 'unassigned') return 'Not yet assigned';
     if (row['state'] == 'blocked') return 'Blocked batch';
     if (!canWin) return 'Genuine product';
     if (row['taken'] == true) return 'Already scanned';
@@ -105,6 +106,13 @@ class PostgresScanDataStore implements ScanDataStore {
     }
 
     final row = found.first.toColumnMap();
+
+    // Created by Crown Solar but not yet assigned to a product serial, so it
+    // is not a product anyone can install or claim (CSE-7).
+    if (row['state'] == 'unassigned') {
+      return ScanOutcomeRow(code: normalised, verdict: 'unassigned');
+    }
+
     final product = _productFrom(row);
 
     // Withdrawn. Still genuine, which is why it is its own answer.

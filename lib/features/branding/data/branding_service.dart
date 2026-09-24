@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../core/staff/raised_by.dart';
 import '../../wallet/data/wallet_repository.dart';
 
 /// What a partner is measured against when board types are filtered.
@@ -199,6 +200,7 @@ class BrandingRequest {
     required this.company,
     required this.partner,
     this.rejectionReason,
+    this.raisedBy,
   });
 
   final String reference;
@@ -219,6 +221,9 @@ class BrandingRequest {
   final Money company;
   final Money partner;
   final String? rejectionReason;
+
+  /// Only when an officer raised it through Crown Solar Teams.
+  final RaisedBy? raisedBy;
 
   bool get inProgress => status == 'in_progress';
   bool get completed => status == 'completed';
@@ -256,6 +261,7 @@ class BrandingRequest {
     company: Money((json['companyPaisa'] as num).toInt()),
     partner: Money((json['partnerPaisa'] as num).toInt()),
     rejectionReason: json['rejectionReason'] as String?,
+    raisedBy: RaisedBy.fromJson(json['raisedBy']),
     boards: [
       for (final entry in json['boards'] as List? ?? const [])
         BrandingRequestBoard.fromJson(entry as Map<String, dynamic>),

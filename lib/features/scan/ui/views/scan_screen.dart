@@ -273,6 +273,14 @@ class _Result extends StatelessWidget {
               'We cannot match this code. Check you scanned the Crown Solar '
               'label, and contact the team if it keeps failing.',
         ),
+        ScanVerdict.unassigned => (
+          icon: LucideIcons.hourglass,
+          tone: DsTone.warning,
+          title: 'Not yet assigned',
+          message:
+              'This code is not yet assigned to a product. Check again '
+              'later, or contact the team if it keeps showing.',
+        ),
         ScanVerdict.blocked => (
           icon: LucideIcons.octagonAlert,
           tone: DsTone.error,
